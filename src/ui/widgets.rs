@@ -1,5 +1,4 @@
-
-use adw::{self, NavigationSplitView, NavigationPage};
+use adw::{self, NavigationPage, NavigationSplitView};
 use relm4::gtk;
 
 #[allow(dead_code)]
@@ -67,9 +66,6 @@ pub struct AppWidgets {
 
     // Toast Overlay
     pub toast_overlay: adw::ToastOverlay,
-    
-    // Java Confirmation Dialog
-    pub java_dialog: adw::MessageDialog,
 
     // Logs view
     pub logs_view: gtk::TextView,

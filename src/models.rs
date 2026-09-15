@@ -89,8 +89,6 @@ pub struct AssetIndexFile {
     pub objects: HashMap<String, AssetObject>,
 }
 
-
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
     pub username: String,

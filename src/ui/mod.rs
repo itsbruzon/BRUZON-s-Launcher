@@ -1,19 +1,19 @@
-pub mod msg;
-pub mod widgets;
-pub mod model;
-pub mod sidebar;
-pub mod home;
 pub mod create;
-pub mod settings;
-pub mod logs;
+pub mod home;
 pub mod loading;
+pub mod logs;
+pub mod model;
+pub mod msg;
+pub mod settings;
+pub mod sidebar;
+pub mod widgets;
 
 pub use model::AppModel;
 pub use msg::AppMsg;
 
 use adw::prelude::*;
-use relm4::prelude::*;
 use relm4::gtk;
+use relm4::prelude::*;
 // use gtk::prelude::*;
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 use std::collections::HashMap;
@@ -83,7 +83,7 @@ impl SimpleComponent for AppModel {
             /* Remove background from titlebar buttons */
             .transparent-window headerbar button { background-color: transparent; box-shadow: none; border: none; }
         ");
-        
+
         if let Some(display) = gtk::gdk::Display::default() {
             gtk::style_context_add_provider_for_display(
                 &display,
@@ -100,7 +100,6 @@ impl SimpleComponent for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-
         // Initialize model
         let mut model = AppModel {
             state: AppState::Loading,
@@ -132,11 +131,7 @@ impl SimpleComponent for AppModel {
             version_list_model: None,
 
             toast_overlay: None,
-
-            pending_launch_profile: None,
-
             sender: sender.clone(),
-            java_dialog_request: None,
             rt: std::sync::Arc::new(Runtime::new().unwrap()),
         };
 
@@ -153,7 +148,21 @@ impl SimpleComponent for AppModel {
         navigation_split_view.set_min_sidebar_width(60.0);
 
         // Create sidebar
-        let (sidebar, home_button, create_sidebar_button, settings_button, logs_button, home_label, create_label, settings_label, logs_label, home_box, create_box, settings_box, logs_box) = create_sidebar(&sender);
+        let (
+            sidebar,
+            home_button,
+            create_sidebar_button,
+            settings_button,
+            logs_button,
+            home_label,
+            create_label,
+            settings_label,
+            logs_label,
+            home_box,
+            create_box,
+            settings_box,
+            logs_box,
+        ) = create_sidebar(&sender);
         navigation_split_view.set_sidebar(Some(&sidebar));
 
         // Create content stack for different sections
@@ -162,15 +171,11 @@ impl SimpleComponent for AppModel {
         content_stack.set_transition_duration(200);
 
         // Create widget fields first
-        let username_entry = adw::EntryRow::builder()
-            .title("Username")
-            .build();
+        let username_entry = adw::EntryRow::builder().title("Username").build();
 
         let version_list_model = gtk::StringList::new(&[]);
         let version_combo = {
-            let combo = adw::ComboRow::builder()
-                .title("Minecraft Version")
-                .build();
+            let combo = adw::ComboRow::builder().title("Minecraft Version").build();
             combo.set_model(Some(&version_list_model));
             combo
         };
@@ -179,7 +184,14 @@ impl SimpleComponent for AppModel {
         let max_ram = crate::utils::get_total_memory_mb();
         let ram_scale = adw::SpinRow::builder()
             .title("RAM (MB)")
-            .adjustment(&gtk::Adjustment::new(4096.0, 2048.0, max_ram as f64, 256.0, 256.0, 0.0))
+            .adjustment(&gtk::Adjustment::new(
+                4096.0,
+                2048.0,
+                max_ram as f64,
+                256.0,
+                256.0,
+                0.0,
+            ))
             .build();
 
         let fabric_switch = adw::SwitchRow::builder()
@@ -187,16 +199,20 @@ impl SimpleComponent for AppModel {
             .subtitle("Install Fabric Modloader for this version")
             .build();
 
-        let hide_logs_switch = adw::SwitchRow::builder()
-            .title("Hide Console")
-            .build();
+        let hide_logs_switch = adw::SwitchRow::builder().title("Hide Console").build();
 
         let profile_list = gtk::ListBox::new();
         let loading_widgets = create_loading_widgets();
 
         // Create pages for each section
         let home_page = create_home_page(&sender, &profile_list);
-        let create_page = create_create_instance_page(&sender, &username_entry, &version_combo, &ram_scale, &fabric_switch);
+        let create_page = create_create_instance_page(
+            &sender,
+            &username_entry,
+            &version_combo,
+            &ram_scale,
+            &fabric_switch,
+        );
         let (settings_page, theme_combo) = create_settings_page(&sender, &hide_logs_switch);
         let (logs_page, logs_view) = create_logs_page(&sender, &model.logs);
 
@@ -285,28 +301,6 @@ impl SimpleComponent for AppModel {
 
         root.set_content(Some(&main_box));
 
-        // Create Java Confirmation Dialog
-        let java_dialog = adw::MessageDialog::builder()
-            .heading("Java Missing")
-            .body("This version of Minecraft requires a specific version of Java which was not found on your system. Do you want to download and install it automatically?")
-            .transient_for(&root)
-            .modal(true)
-            .build();
-            
-        java_dialog.add_response("cancel", "Cancel");
-        java_dialog.add_response("install", "Install");
-        java_dialog.set_response_appearance("install", adw::ResponseAppearance::Suggested);
-        
-        let sender_clone = sender.clone();
-        java_dialog.connect_response(None, move |dialog: &adw::MessageDialog, response| {
-            dialog.set_visible(false);
-            if response == "install" {
-                sender_clone.input(AppMsg::JavaDownloadConfirmed);
-            } else {
-                sender_clone.input(AppMsg::JavaDownloadCancelled);
-            }
-        });
-
         // Create widgets struct
         let widgets = AppWidgets {
             window: root.clone(),
@@ -353,7 +347,6 @@ impl SimpleComponent for AppModel {
             error_label,
 
             toast_overlay,
-            java_dialog,
             logs_view,
         };
 
@@ -374,7 +367,11 @@ impl SimpleComponent for AppModel {
 
         // Load settings
         let sender_clone = sender.clone();
-        let config_dir_clone = if let Some(l) = &model.launcher { l.config.minecraft_dir.clone() } else { std::path::PathBuf::from(".") };
+        let config_dir_clone = if let Some(l) = &model.launcher {
+            l.config.minecraft_dir.clone()
+        } else {
+            std::path::PathBuf::from(".")
+        };
         model.rt.spawn(async move {
             let settings = Settings::load(&config_dir_clone).await;
             sender_clone.input(AppMsg::SettingsLoaded(settings));
@@ -405,14 +402,17 @@ impl SimpleComponent for AppModel {
         // Implementation of update logic
         match msg {
             AppMsg::NavigateToSection(section) => {
-                self.state = AppState::Ready { current_section: section };
+                self.state = AppState::Ready {
+                    current_section: section,
+                };
             }
 
             AppMsg::SettingsLoaded(settings) => {
                 self.settings = settings.clone();
                 // Apply loaded settings
                 self.sidebar_collapsed = settings.sidebar_collapsed;
-                self.sender.input(AppMsg::ToggleHideLogs(settings.hide_logs));
+                self.sender
+                    .input(AppMsg::ToggleHideLogs(settings.hide_logs));
 
                 // Delay theme application to ensure window is fully realized or just apply it
                 let theme = settings.theme.clone();
@@ -423,7 +423,6 @@ impl SimpleComponent for AppModel {
             AppMsg::ToggleHideLogs(hide) => {
                 self.settings.hide_logs = hide;
                 self.save_settings();
-
             }
             AppMsg::ToggleSidebar => {
                 self.sidebar_collapsed = !self.sidebar_collapsed;
@@ -431,18 +430,15 @@ impl SimpleComponent for AppModel {
                 self.save_settings();
             }
             AppMsg::Log(log_line) => {
-                 let mut end_iter = self.logs.end_iter();
-                 self.logs.insert(&mut end_iter, &format!("{}\n", log_line));
+                let mut end_iter = self.logs.end_iter();
+                self.logs.insert(&mut end_iter, &format!("{}\n", log_line));
             }
             AppMsg::VersionsLoaded(result) => {
                 match result {
                     Ok(versions) => {
                         // use crate::utils::{is_at_least_1_8, compare_versions};
                         use crate::utils::compare_versions;
-                        let mut filtered: Vec<_> = versions
-                            .into_iter()
-
-                            .collect();
+                        let mut filtered: Vec<_> = versions.into_iter().collect();
                         filtered.sort_by(|a, b| compare_versions(&b.id, &a.id));
 
                         self.sorted_versions = filtered.iter().map(|v| v.id.clone()).collect();
@@ -463,16 +459,14 @@ impl SimpleComponent for AppModel {
                     }
                 }
             }
-            AppMsg::ProfilesLoaded(result) => {
-                match result {
-                    Ok(profiles) => {
-                        self.profiles = profiles;
-                    }
-                    Err(e) => {
-                        self.error_message = Some(format!("Failed to load profiles: {}", e));
-                    }
+            AppMsg::ProfilesLoaded(result) => match result {
+                Ok(profiles) => {
+                    self.profiles = profiles;
                 }
-            }
+                Err(e) => {
+                    self.error_message = Some(format!("Failed to load profiles: {}", e));
+                }
+            },
             AppMsg::LaunchProfile(profile_name) => {
                 if let Some(profile) = self.profiles.get(&profile_name) {
                     if let Some(launcher) = &self.launcher {
@@ -480,9 +474,9 @@ impl SimpleComponent for AppModel {
                         let profile_clone = profile.clone();
                         let sender_clone = sender.clone();
 
-                        self.state = AppState::Launching { version: profile_clone.version.clone() };
-                        self.pending_launch_profile = Some(profile_name.clone());
-
+                        self.state = AppState::Launching {
+                            version: profile_clone.version.clone(),
+                        };
                         let profile_name_clone = profile_name.clone();
 
                         std::thread::spawn(move || {
@@ -497,74 +491,74 @@ impl SimpleComponent for AppModel {
                             // But `AppMsg::LaunchProfile` implementation is huge.
                             // I will replace the whole block.
                         });
-                        
+
                         let rt = self.rt.clone();
                         rt.spawn(async move {
                             let sender_progress = sender_clone.clone();
                             let on_progress = move |pct: f64, msg: String| {
                                 sender_progress.input(AppMsg::DownloadProgress(pct, msg));
                             };
-                            
+
                             // 1. Prepare and Launch
-                            match launcher_clone.prepare_and_launch(
-                                profile_clone.version.clone(),
-                                profile_clone.username.clone(),
-                                profile_clone.ram_mb,
-                                profile_clone.is_fabric,
-                                profile_clone.game_dir.as_ref().map(std::path::PathBuf::from),
-                                on_progress
-                            ).await {
-                                Ok(mut command) => {
-                                    match command.spawn() {
-                                        Ok(mut child) => {
-                                            sender_clone.input(AppMsg::GameStarted);
-                                            let start_time = std::time::Instant::now();
-                                            let stdout = child.stdout.take();
-                                            let stderr = child.stderr.take();
+                            match launcher_clone
+                                .prepare_and_launch(
+                                    profile_clone.version.clone(),
+                                    profile_clone.username.clone(),
+                                    profile_clone.ram_mb,
+                                    profile_clone.is_fabric,
+                                    profile_clone
+                                        .game_dir
+                                        .as_ref()
+                                        .map(std::path::PathBuf::from),
+                                    on_progress,
+                                )
+                                .await
+                            {
+                                Ok(mut command) => match command.spawn() {
+                                    Ok(mut child) => {
+                                        sender_clone.input(AppMsg::GameStarted);
+                                        let start_time = std::time::Instant::now();
+                                        let stdout = child.stdout.take();
+                                        let stderr = child.stderr.take();
 
-                                            if let Some(stdout) = stdout {
-                                                let sender_log = sender_clone.clone();
-                                                let mut reader = BufReader::new(stdout).lines();
-                                                tokio::spawn(async move {
-                                                    while let Ok(Some(line)) = reader.next_line().await {
-                                                        sender_log.input(AppMsg::Log(line));
-                                                    }
-                                                });
-                                            }
-                                            if let Some(stderr) = stderr {
-                                                let sender_log = sender_clone.clone();
-                                                let mut reader = BufReader::new(stderr).lines();
-                                                tokio::spawn(async move {
-                                                    while let Ok(Some(line)) = reader.next_line().await {
-                                                        sender_log.input(AppMsg::Log(format!("[ERR] {}", line)));
-                                                    }
-                                                });
-                                            }
-
-                                            let _ = child.wait().await;
-                                            let duration = start_time.elapsed().as_secs();
-                                            sender_clone.input(AppMsg::SessionEnded(profile_name_clone, duration));
-                                            sender_clone.input(AppMsg::LaunchCompleted);
+                                        if let Some(stdout) = stdout {
+                                            let sender_log = sender_clone.clone();
+                                            let mut reader = BufReader::new(stdout).lines();
+                                            tokio::spawn(async move {
+                                                while let Ok(Some(line)) = reader.next_line().await
+                                                {
+                                                    sender_log.input(AppMsg::Log(line));
+                                                }
+                                            });
                                         }
-                                        Err(e) => sender_clone.input(AppMsg::Error(format!("Failed to spawn: {}", e))),
+                                        if let Some(stderr) = stderr {
+                                            let sender_log = sender_clone.clone();
+                                            let mut reader = BufReader::new(stderr).lines();
+                                            tokio::spawn(async move {
+                                                while let Ok(Some(line)) = reader.next_line().await
+                                                {
+                                                    sender_log.input(AppMsg::Log(format!(
+                                                        "[ERR] {}",
+                                                        line
+                                                    )));
+                                                }
+                                            });
+                                        }
+
+                                        let _ = child.wait().await;
+                                        let duration = start_time.elapsed().as_secs();
+                                        sender_clone.input(AppMsg::SessionEnded(
+                                            profile_name_clone,
+                                            duration,
+                                        ));
+                                        sender_clone.input(AppMsg::LaunchCompleted);
                                     }
-                                }
+                                    Err(e) => sender_clone
+                                        .input(AppMsg::Error(format!("Failed to spawn: {}", e))),
+                                },
                                 Err(e) => {
-                                     let err_str = e.to_string();
-                                     if err_str.contains("Java Runtime") && err_str.contains("is missing") {
-                                         // Parse version. "Java Runtime {ver} is missing..."
-                                         // Clean string "Java Runtime " -> 13 chars
-                                         // Better: split whitespace
-                                         let parts: Vec<&str> = err_str.split_whitespace().collect();
-                                         // ["Java", "Runtime", "17", "is", "missing.", ...]
-                                         if let Some(ver_str) = parts.get(2) {
-                                             if let Ok(ver) = ver_str.parse::<u32>() {
-                                                  sender_clone.input(AppMsg::ShowJavaDialog(ver));
-                                                  return;
-                                             }
-                                         }
-                                     } 
-                                     sender_clone.input(AppMsg::Error(format!("Launch Failed: {}", e)));
+                                    sender_clone
+                                        .input(AppMsg::Error(format!("Launch Failed: {}", e)));
                                 }
                             }
                         });
@@ -573,52 +567,24 @@ impl SimpleComponent for AppModel {
             }
             AppMsg::GameStarted => {
                 if let AppState::Launching { version } = &self.state {
-                    self.state = AppState::GameRunning { version: version.clone() };
+                    self.state = AppState::GameRunning {
+                        version: version.clone(),
+                    };
                 }
             }
             AppMsg::DownloadProgress(progress, status) => {
-                 if let AppState::Downloading { version, .. } = &self.state {
-                      self.state = AppState::Downloading { version: version.clone(), progress, status };
-                 }
-            }
-            AppMsg::ShowJavaDialog(version) => {
-                 self.java_dialog_request = Some(version);
-            }
-            AppMsg::JavaDownloadConfirmed => {
-                 self.java_dialog_request = None;
-                 self.sender.input(AppMsg::InstallJavaAndLaunch);
-            }
-            AppMsg::JavaDownloadCancelled => {
-                 self.java_dialog_request = None;
-                 self.state = AppState::Ready { current_section: Section::Home };
-                 self.pending_launch_profile = None;
-            }
-            AppMsg::InstallJavaAndLaunch => {
-                 if let Some(profile_name) = &self.pending_launch_profile {
-                     let profile_name_clone = profile_name.clone();
-                     if let Some(launcher) = &self.launcher {
-                         let launcher_clone = launcher.clone();
-                         let sender_clone = sender.clone();
-                         
-                         if let Some(profile) = self.profiles.get(profile_name) {
-                             let version_id = profile.version.clone();
-                             self.state = AppState::Downloading { version: version_id.clone(), progress: 0.0, status: "Downloading Java...".to_string() };
-
-                             self.rt.spawn(async move {
-                                  let sender_clone_2 = sender_clone.clone();
-                                  match launcher_clone.prepare_java(&version_id, move |pct, msg| {
-                                       sender_clone_2.input(AppMsg::DownloadProgress(pct, msg));
-                                  }).await {
-                                       Ok(_) => sender_clone.input(AppMsg::LaunchProfile(profile_name_clone)),
-                                       Err(e) => sender_clone.input(AppMsg::Error(format!("Failed to download Java: {}", e))),
-                                  }
-                             });
-                         }
-                     }
-                 }
+                if let AppState::Downloading { version, .. } = &self.state {
+                    self.state = AppState::Downloading {
+                        version: version.clone(),
+                        progress,
+                        status,
+                    };
+                }
             }
             AppMsg::LaunchCompleted => {
-                self.state = AppState::Ready { current_section: Section::Home };
+                self.state = AppState::Ready {
+                    current_section: Section::Home,
+                };
             }
             AppMsg::UsernameChanged(username) => {
                 self.input_username = username;
@@ -640,8 +606,12 @@ impl SimpleComponent for AppModel {
                 self.input_install_fabric = install;
             }
             AppMsg::SaveProfile => {
-                if self.input_username.trim().is_empty() { return; }
-                if self.input_version.is_none() { return; }
+                if self.input_username.trim().is_empty() {
+                    return;
+                }
+                if self.input_version.is_none() {
+                    return;
+                }
 
                 let selected_version = self.input_version.clone().unwrap();
                 let is_fabric = self.input_install_fabric && self.fabric_switch_enabled;
@@ -663,7 +633,7 @@ impl SimpleComponent for AppModel {
                 };
 
                 self.profiles.insert(profile_name.clone(), profile);
-                
+
                 self.save_profiles(sender.clone());
 
                 self.input_username.clear();
@@ -690,17 +660,19 @@ impl SimpleComponent for AppModel {
                 self.settings.theme = theme.clone();
                 if let Some(window) = &self.window {
                     let style_manager = adw::StyleManager::default();
-                    
+
                     // Reset CSS provider if stored? Since we don't store it, we just add.
                     // A better approach for "Total Black" is just forcing dark and adding a provider.
                     // For now, let's just try setting the scheme.
-                    
+
                     // Reset classes
                     window.remove_css_class("transparent-window");
 
                     match theme {
                         Theme::Dark => style_manager.set_color_scheme(adw::ColorScheme::ForceDark),
-                        Theme::Light => style_manager.set_color_scheme(adw::ColorScheme::ForceLight),
+                        Theme::Light => {
+                            style_manager.set_color_scheme(adw::ColorScheme::ForceLight)
+                        }
                         Theme::System => style_manager.set_color_scheme(adw::ColorScheme::Default),
                         Theme::Transparent => {
                             style_manager.set_color_scheme(adw::ColorScheme::ForceDark);
@@ -712,16 +684,21 @@ impl SimpleComponent for AppModel {
             }
             AppMsg::OpenMinecraftFolder => {
                 if let Some(launcher) = &self.launcher {
-                     let dir = launcher.config.minecraft_dir.clone();
-                    self.rt.spawn(async move { let _ = open::that(dir); });
+                    let dir = launcher.config.minecraft_dir.clone();
+                    self.rt.spawn(async move {
+                        let _ = open::that(dir);
+                    });
                 }
             }
             AppMsg::RequestDeleteProfile(profile_name) => {
                 // Show dialog
-                 if let Some(window) = &self.window {
+                if let Some(window) = &self.window {
                     let dialog = adw::MessageDialog::builder()
                         .heading("Delete Profile?")
-                        .body(format!("Are you sure you want to delete profile '{}'?", profile_name))
+                        .body(format!(
+                            "Are you sure you want to delete profile '{}'?",
+                            profile_name
+                        ))
                         .transient_for(window)
                         .modal(true)
                         .build();
@@ -731,16 +708,23 @@ impl SimpleComponent for AppModel {
                     let sender_clone = sender.clone();
                     let pname = profile_name.clone();
                     dialog.connect_response(None, move |d, response| {
-                        if response == "delete" { sender_clone.input(AppMsg::DeleteProfile(pname.clone())); }
+                        if response == "delete" {
+                            sender_clone.input(AppMsg::DeleteProfile(pname.clone()));
+                        }
                         d.close();
                     });
                     dialog.present();
-                 }
+                }
             }
             AppMsg::SessionEnded(profile_name, duration) => {
                 if let Some(profile) = self.profiles.get_mut(&profile_name) {
                     profile.playtime_seconds += duration;
-                    profile.last_launch = Some(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs());
+                    profile.last_launch = Some(
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs(),
+                    );
                     self.save_profiles(sender.clone());
                 }
             }
@@ -748,11 +732,6 @@ impl SimpleComponent for AppModel {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if let Some(version) = self.java_dialog_request {
-              widgets.java_dialog.set_body(&format!("This version of Minecraft requires Java {}, which was not found on your system. Do you want to download and install it automatically?", version));
-              widgets.java_dialog.set_visible(true);
-        }
-
         match &self.state {
             AppState::Loading => {
                 widgets.content_stack.set_visible_child_name("loading");
@@ -770,26 +749,34 @@ impl SimpleComponent for AppModel {
                         update_profile_list(&widgets.profile_list, &self.profiles, &self.sender);
                     }
                     Section::CreateInstance => {
-                         widgets.create_sidebar_button.add_css_class("suggested-action");
-                         widgets.content_stack.set_visible_child_name("create");
-                         widgets.fabric_switch.set_active(self.input_install_fabric);
-                         widgets.fabric_switch.set_sensitive(self.fabric_switch_enabled);
+                        widgets
+                            .create_sidebar_button
+                            .add_css_class("suggested-action");
+                        widgets.content_stack.set_visible_child_name("create");
+                        widgets.fabric_switch.set_active(self.input_install_fabric);
+                        widgets
+                            .fabric_switch
+                            .set_sensitive(self.fabric_switch_enabled);
                     }
                     Section::Settings => {
-                         widgets.settings_button.add_css_class("suggested-action");
-                         widgets.content_stack.set_visible_child_name("settings");
+                        widgets.settings_button.add_css_class("suggested-action");
+                        widgets.content_stack.set_visible_child_name("settings");
                     }
                     Section::Logs => {
-                         widgets.logs_button.add_css_class("suggested-action");
-                         widgets.content_stack.set_visible_child_name("logs");
+                        widgets.logs_button.add_css_class("suggested-action");
+                        widgets.content_stack.set_visible_child_name("logs");
                     }
                 }
             }
-            AppState::Downloading { progress, status, .. } => {
+            AppState::Downloading {
+                progress, status, ..
+            } => {
                 widgets.content_stack.set_visible_child_name("loading");
                 widgets.loading_page.set_title("Downloading...");
                 widgets.loading_page.set_description(Some(status));
-                widgets.loading_page.set_child(Some(&widgets.loading_progress));
+                widgets
+                    .loading_page
+                    .set_child(Some(&widgets.loading_progress));
                 widgets.loading_progress.set_fraction(*progress);
                 widgets.loading_spinner.stop();
                 widgets.set_sidebar_buttons_sensitive(false);
@@ -798,15 +785,21 @@ impl SimpleComponent for AppModel {
                 widgets.content_stack.set_visible_child_name("loading");
                 widgets.loading_page.set_title("Launching...");
                 widgets.loading_page.set_description(Some("If this is your first time launching, it may take longer as files are downloaded."));
-                widgets.loading_page.set_child(Some(&widgets.loading_spinner));
+                widgets
+                    .loading_page
+                    .set_child(Some(&widgets.loading_spinner));
                 widgets.loading_spinner.start();
                 widgets.set_sidebar_buttons_sensitive(false);
             }
             AppState::GameRunning { .. } => {
                 widgets.content_stack.set_visible_child_name("loading");
                 widgets.loading_page.set_title("Game Running");
-                widgets.loading_page.set_description(Some("Minecraft is running."));
-                widgets.loading_page.set_child(Some(&widgets.loading_spinner));
+                widgets
+                    .loading_page
+                    .set_description(Some("Minecraft is running."));
+                widgets
+                    .loading_page
+                    .set_child(Some(&widgets.loading_spinner));
                 widgets.loading_spinner.start();
                 widgets.set_sidebar_buttons_sensitive(false);
             }
@@ -820,7 +813,7 @@ impl SimpleComponent for AppModel {
         widgets.logs_button.set_visible(!self.settings.hide_logs);
         widgets.hide_logs_switch.set_active(self.settings.hide_logs);
 
-         let theme_index = match self.settings.theme {
+        let theme_index = match self.settings.theme {
             Theme::System => 0,
             Theme::Light => 1,
             Theme::Dark => 2,
@@ -831,19 +824,19 @@ impl SimpleComponent for AppModel {
         }
 
         if self.sidebar_collapsed {
-             widgets.navigation_split_view.set_min_sidebar_width(60.0);
-             widgets.navigation_split_view.set_max_sidebar_width(60.0);
-             widgets.home_box.set_halign(gtk::Align::Center);
-             widgets.create_box.set_halign(gtk::Align::Center);
-             widgets.settings_box.set_halign(gtk::Align::Center);
-             widgets.logs_box.set_halign(gtk::Align::Center);
+            widgets.navigation_split_view.set_min_sidebar_width(60.0);
+            widgets.navigation_split_view.set_max_sidebar_width(60.0);
+            widgets.home_box.set_halign(gtk::Align::Center);
+            widgets.create_box.set_halign(gtk::Align::Center);
+            widgets.settings_box.set_halign(gtk::Align::Center);
+            widgets.logs_box.set_halign(gtk::Align::Center);
         } else {
-             widgets.navigation_split_view.set_min_sidebar_width(180.0);
-             widgets.navigation_split_view.set_max_sidebar_width(250.0);
-             widgets.home_box.set_halign(gtk::Align::Start);
-             widgets.create_box.set_halign(gtk::Align::Start);
-             widgets.settings_box.set_halign(gtk::Align::Start);
-             widgets.logs_box.set_halign(gtk::Align::Start);
+            widgets.navigation_split_view.set_min_sidebar_width(180.0);
+            widgets.navigation_split_view.set_max_sidebar_width(250.0);
+            widgets.home_box.set_halign(gtk::Align::Start);
+            widgets.create_box.set_halign(gtk::Align::Start);
+            widgets.settings_box.set_halign(gtk::Align::Start);
+            widgets.logs_box.set_halign(gtk::Align::Start);
         }
 
         widgets.home_label.set_visible(!self.sidebar_collapsed);
@@ -855,33 +848,35 @@ impl SimpleComponent for AppModel {
 
 // Helpers for model to keep update() cleaner
 impl AppModel {
-     fn save_settings(&self) {
-         if let Some(launcher) = &self.launcher {
-             let config_dir = launcher.config.minecraft_dir.clone();
-             let settings_clone = self.settings.clone();
-             std::thread::spawn(move || {
-                 let rt = Runtime::new().unwrap();
-                 rt.block_on(async { let _ = settings_clone.save(&config_dir).await; });
-             });
-         }
-     }
+    fn save_settings(&self) {
+        if let Some(launcher) = &self.launcher {
+            let config_dir = launcher.config.minecraft_dir.clone();
+            let settings_clone = self.settings.clone();
+            std::thread::spawn(move || {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let _ = settings_clone.save(&config_dir).await;
+                });
+            });
+        }
+    }
 
-     fn save_profiles(&self, sender: ComponentSender<Self>) {
-         if let Some(launcher) = &self.launcher {
-             let config_dir = launcher.config.minecraft_dir.clone();
-             let profiles_clone = self.profiles.clone();
-             std::thread::spawn(move || {
-                 let rt = Runtime::new().unwrap();
-                 rt.block_on(async {
-                     let path = config_dir.join("profiles.json");
-                     let json = serde_json::to_string_pretty(&profiles_clone).unwrap_or_default();
-                     if let Err(e) = tokio::fs::write(&path, json).await {
-                         sender.input(AppMsg::Error(format!("Failed to save profiles: {}", e)));
-                     }
-                 });
-             });
-         }
-     }
+    fn save_profiles(&self, sender: ComponentSender<Self>) {
+        if let Some(launcher) = &self.launcher {
+            let config_dir = launcher.config.minecraft_dir.clone();
+            let profiles_clone = self.profiles.clone();
+            std::thread::spawn(move || {
+                let rt = Runtime::new().unwrap();
+                rt.block_on(async {
+                    let path = config_dir.join("profiles.json");
+                    let json = serde_json::to_string_pretty(&profiles_clone).unwrap_or_default();
+                    if let Err(e) = tokio::fs::write(&path, json).await {
+                        sender.input(AppMsg::Error(format!("Failed to save profiles: {}", e)));
+                    }
+                });
+            });
+        }
+    }
 }
 
 // Extension to AppWidgets to help with view updates
@@ -892,10 +887,11 @@ impl AppWidgets {
         self.settings_button.set_sensitive(sensitive);
         self.logs_button.set_sensitive(sensitive);
     }
-    
+
     fn clear_sidebar_selection(&self) {
         self.home_button.remove_css_class("suggested-action");
-        self.create_sidebar_button.remove_css_class("suggested-action");
+        self.create_sidebar_button
+            .remove_css_class("suggested-action");
         self.settings_button.remove_css_class("suggested-action");
         self.logs_button.remove_css_class("suggested-action");
     }

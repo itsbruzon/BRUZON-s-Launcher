@@ -1,10 +1,13 @@
-use relm4::gtk;
-use relm4::ComponentSender;
 use gtk::prelude::*;
+use relm4::ComponentSender;
+use relm4::gtk;
 
 use crate::ui::model::AppModel;
 
-pub fn create_logs_page(_sender: &ComponentSender<AppModel>, logs_buffer: &gtk::TextBuffer) -> (gtk::Box, gtk::TextView) {
+pub fn create_logs_page(
+    _sender: &ComponentSender<AppModel>,
+    logs_buffer: &gtk::TextBuffer,
+) -> (gtk::Box, gtk::TextView) {
     let container = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(24)

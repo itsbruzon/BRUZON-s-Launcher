@@ -1,11 +1,14 @@
-use relm4::gtk;
-use relm4::ComponentSender;
-use gtk::prelude::*;
+use crate::models::Profile;
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
-use crate::models::Profile;
+use gtk::prelude::*;
+use relm4::ComponentSender;
+use relm4::gtk;
 
-pub fn create_home_page(_sender: &ComponentSender<AppModel>, profile_list: &gtk::ListBox) -> gtk::Box {
+pub fn create_home_page(
+    _sender: &ComponentSender<AppModel>,
+    profile_list: &gtk::ListBox,
+) -> gtk::Box {
     let main_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .hexpand(true)
@@ -42,7 +45,11 @@ pub fn create_home_page(_sender: &ComponentSender<AppModel>, profile_list: &gtk:
     main_box
 }
 
-pub fn update_profile_list(profile_list: &gtk::ListBox, profiles: &std::collections::HashMap<String, Profile>, sender: &ComponentSender<AppModel>) {
+pub fn update_profile_list(
+    profile_list: &gtk::ListBox,
+    profiles: &std::collections::HashMap<String, Profile>,
+    sender: &ComponentSender<AppModel>,
+) {
     // Clear existing children
     while let Some(child) = profile_list.first_child() {
         profile_list.remove(&child);
@@ -64,7 +71,11 @@ pub fn update_profile_list(profile_list: &gtk::ListBox, profiles: &std::collecti
     }
 }
 
-fn create_profile_row(name: &str, profile: &Profile, sender: &ComponentSender<AppModel>) -> gtk::ListBoxRow {
+fn create_profile_row(
+    name: &str,
+    profile: &Profile,
+    sender: &ComponentSender<AppModel>,
+) -> gtk::ListBoxRow {
     let row = gtk::ListBoxRow::new();
 
     let box_container = gtk::Box::builder()
@@ -108,7 +119,10 @@ fn create_profile_row(name: &str, profile: &Profile, sender: &ComponentSender<Ap
     };
 
     let details_label = gtk::Label::builder()
-        .label(format!("{} • {} MB • {}", version_display, profile.ram_mb, playtime_str))
+        .label(format!(
+            "{} • {} MB • {}",
+            version_display, profile.ram_mb, playtime_str
+        ))
         .halign(gtk::Align::Start)
         .css_classes(vec!["dim-label".to_string()])
         .build();

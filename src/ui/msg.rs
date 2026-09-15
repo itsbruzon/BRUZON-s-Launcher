@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use crate::models::{MinecraftVersion, Profile, Section, Theme};
 use crate::settings::Settings;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum AppMsg {
@@ -27,8 +27,4 @@ pub enum AppMsg {
     RequestDeleteProfile(String),
     SettingsLoaded(Settings),
     SessionEnded(String, u64),
-    ShowJavaDialog(u32),
-    JavaDownloadConfirmed,
-    JavaDownloadCancelled,
-    InstallJavaAndLaunch,
 }

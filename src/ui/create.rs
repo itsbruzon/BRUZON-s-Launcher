@@ -1,10 +1,10 @@
-use relm4::gtk;
-use relm4::ComponentSender;
-use gtk::prelude::*;
-use adw::prelude::*;
-use adw::{ComboRow, EntryRow, SpinRow};
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
+use adw::prelude::*;
+use adw::{ComboRow, EntryRow, SpinRow};
+use gtk::prelude::*;
+use relm4::ComponentSender;
+use relm4::gtk;
 
 pub fn create_create_instance_page(
     sender: &ComponentSender<AppModel>,

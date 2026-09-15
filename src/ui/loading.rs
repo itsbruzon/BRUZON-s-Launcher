@@ -1,5 +1,5 @@
-use relm4::gtk;
 use gtk::prelude::*;
+use relm4::gtk;
 
 use adw::StatusPage;
 
