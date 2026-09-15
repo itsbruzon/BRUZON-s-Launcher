@@ -14,7 +14,6 @@ pub struct AppWidgets {
     pub home_page: gtk::Box,
     pub create_page: gtk::Box,
     pub settings_page: gtk::ScrolledWindow,
-    pub mods_page: gtk::Box,
     pub logs_page: gtk::Box,
     pub loading_page: adw::StatusPage,
 
@@ -25,7 +24,6 @@ pub struct AppWidgets {
     pub ram_scale: adw::SpinRow,
     pub fabric_switch: adw::SwitchRow,
     pub hide_logs_switch: adw::SwitchRow,
-    pub hide_mods_switch: adw::SwitchRow,
 
     // Buttons
     pub launch_button: gtk::Button,
@@ -37,25 +35,18 @@ pub struct AppWidgets {
     // Sidebar buttons
     pub home_button: gtk::Button,
     pub create_sidebar_button: gtk::Button,
-    pub mods_button: gtk::Button,
     pub settings_button: gtk::Button,
     pub logs_button: gtk::Button,
-
-    // Mods widgets
-    pub mod_profile_dropdown: gtk::DropDown,
-    pub mod_search_stack: gtk::Stack,
 
     // Sidebar button labels (for visibility)
     pub home_label: gtk::Label,
     pub create_label: gtk::Label,
-    pub mods_label: gtk::Label,
     pub settings_label: gtk::Label,
     pub logs_label: gtk::Label,
 
     // Sidebar button boxes (for alignment)
     pub home_box: gtk::Box,
     pub create_box: gtk::Box,
-    pub mods_box: gtk::Box,
     pub settings_box: gtk::Box,
     pub logs_box: gtk::Box,
 

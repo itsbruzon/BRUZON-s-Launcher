@@ -16,8 +16,6 @@ anyhow = "1.0"
 zip = "0.6"
 flate2 = "1.0"
 tar = "0.4"
-image = { version = "0.24", default-features = false, features = ["png", "webp"] }
-
 gtk4 = { version = "0.9", package = "gtk4" }
 relm4 = { version = "0.9", features = ["macros"] }
 

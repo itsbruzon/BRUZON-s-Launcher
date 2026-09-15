@@ -9,7 +9,6 @@ pub struct Settings {
     pub theme: Theme,
     pub hide_logs: bool,
     pub sidebar_collapsed: bool,
-    pub hide_mods_button: bool,
 }
 
 impl Default for Settings {
@@ -18,7 +17,6 @@ impl Default for Settings {
             theme: Theme::System,
             hide_logs: false,
             sidebar_collapsed: false,
-            hide_mods_button: false,
         }
     }
 }

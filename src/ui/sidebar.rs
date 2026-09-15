@@ -7,7 +7,7 @@ use crate::models::{Section};
 
 use adw::NavigationPage;
 
-pub fn create_sidebar(sender: &ComponentSender<AppModel>) -> (NavigationPage, gtk::Button, gtk::Button, gtk::Button, gtk::Button, gtk::Button, gtk::Label, gtk::Label, gtk::Label, gtk::Label, gtk::Label, gtk::Box, gtk::Box, gtk::Box, gtk::Box, gtk::Box) {
+pub fn create_sidebar(sender: &ComponentSender<AppModel>) -> (NavigationPage, gtk::Button, gtk::Button, gtk::Button, gtk::Button, gtk::Label, gtk::Label, gtk::Label, gtk::Label, gtk::Box, gtk::Box, gtk::Box, gtk::Box) {
     let sidebar_content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(0)
@@ -56,7 +56,6 @@ pub fn create_sidebar(sender: &ComponentSender<AppModel>) -> (NavigationPage, gt
     // Navigation buttons
     let (home_button, home_label, home_box) = create_nav_button("Home", "user-home-symbolic");
     let (create_button, create_label, create_box) = create_nav_button("New Profile", "list-add-symbolic");
-    let (mods_button, mods_label, mods_box) = create_nav_button("Mods", "application-x-addon-symbolic");
     let (settings_button, settings_label, settings_box) = create_nav_button("Settings", "emblem-system-symbolic");
     let (logs_button, logs_label, logs_box) = create_nav_button("Logs", "utilities-terminal-symbolic");
 
@@ -80,11 +79,6 @@ pub fn create_sidebar(sender: &ComponentSender<AppModel>) -> (NavigationPage, gt
     });
 
     let sender_clone = sender.clone();
-    mods_button.connect_clicked(move |_| {
-        sender_clone.input(AppMsg::NavigateToSection(Section::Mods));
-    });
-
-    let sender_clone = sender.clone();
     logs_button.connect_clicked(move |_| {
         sender_clone.input(AppMsg::NavigateToSection(Section::Logs));
     });
@@ -92,7 +86,6 @@ pub fn create_sidebar(sender: &ComponentSender<AppModel>) -> (NavigationPage, gt
     // Add buttons to sidebar (Home > Create > Settings)
     sidebar_content.append(&home_button);
     sidebar_content.append(&create_button);
-    sidebar_content.append(&mods_button);
     sidebar_content.append(&logs_button);
     sidebar_content.append(&settings_button);
 
@@ -120,5 +113,5 @@ pub fn create_sidebar(sender: &ComponentSender<AppModel>) -> (NavigationPage, gt
     // Remove any default background from NavigationPage
     sidebar_page.set_css_classes(&["flat"]);
 
-    (sidebar_page, home_button, create_button, mods_button, settings_button, logs_button, home_label, create_label, mods_label, settings_label, logs_label, home_box, create_box, mods_box, settings_box, logs_box)
+    (sidebar_page, home_button, create_button, settings_button, logs_button, home_label, create_label, settings_label, logs_label, home_box, create_box, settings_box, logs_box)
 }

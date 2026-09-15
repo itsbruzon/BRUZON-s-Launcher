@@ -6,7 +6,7 @@ use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
 use crate::models::Theme;
 
-pub fn create_settings_page(sender: &ComponentSender<AppModel>, hide_logs_switch: &adw::SwitchRow, hide_mods_switch: &adw::SwitchRow) -> (gtk::ScrolledWindow, adw::ComboRow) {
+pub fn create_settings_page(sender: &ComponentSender<AppModel>, hide_logs_switch: &adw::SwitchRow) -> (gtk::ScrolledWindow, adw::ComboRow) {
     let scrolled_window = gtk::ScrolledWindow::builder()
         .hexpand(true)
         .vexpand(true)
@@ -49,17 +49,6 @@ pub fn create_settings_page(sender: &ComponentSender<AppModel>, hide_logs_switch
     hide_logs_switch.connect_active_notify(move |switch| {
         sender_clone.input(AppMsg::ToggleHideLogs(switch.is_active()));
     });
-
-    // Hide Mods switch configuration
-    let sender_clone = sender.clone();
-    hide_mods_switch.connect_active_notify(move |switch| {
-        sender_clone.input(AppMsg::ToggleHideMods(switch.is_active()));
-    });
-    hide_mods_switch.set_hexpand(true);
-    hide_mods_switch.set_halign(gtk::Align::Fill);
-    hide_mods_switch.set_title("Hide Mods");
-    hide_mods_switch.set_subtitle("Hide the Mods button in the sidebar");
-
 
     // Theme selection
     let theme_row = adw::ComboRow::builder()
@@ -108,7 +97,6 @@ pub fn create_settings_page(sender: &ComponentSender<AppModel>, hide_logs_switch
     settings_list.append(&theme_row);
     settings_list.append(&folder_row);
     settings_list.append(hide_logs_switch);
-    settings_list.append(hide_mods_switch);
 
     // Add list box to main content
     content_container.append(&settings_list);
