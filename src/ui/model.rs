@@ -1,17 +1,30 @@
-use std::collections::HashMap;
-use relm4::{ComponentSender, gtk};
+use crate::launcher::MinecraftLauncher;
 use crate::models::{MinecraftVersion, Profile, Section};
 use crate::settings::Settings;
-use crate::launcher::MinecraftLauncher;
+use relm4::{ComponentSender, gtk};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub enum AppState {
     Loading,
-    Ready { current_section: Section },
-    Downloading { version: String, progress: f64, status: String },
-    Launching { version: String },
-    GameRunning { #[allow(dead_code)] version: String },
-    Error { message: String },
+    Ready {
+        current_section: Section,
+    },
+    Downloading {
+        version: String,
+        progress: f64,
+        status: String,
+    },
+    Launching {
+        version: String,
+    },
+    GameRunning {
+        #[allow(dead_code)]
+        version: String,
+    },
+    Error {
+        message: String,
+    },
 }
 
 impl Default for AppState {
@@ -51,12 +64,8 @@ pub struct AppModel {
 
     pub toast_overlay: Option<adw::ToastOverlay>,
 
-    pub pending_launch_profile: Option<String>,
-
     // Component sender for UI updates
     pub sender: ComponentSender<AppModel>,
-
-    pub java_dialog_request: Option<u32>,
 
     // Shared Tokio Runtime
     pub rt: std::sync::Arc<tokio::runtime::Runtime>,

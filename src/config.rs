@@ -12,7 +12,9 @@ pub struct LauncherConfig {
 
 impl LauncherConfig {
     pub fn new() -> Result<Self> {
-        let minecraft_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?.join(".minecraft");
+        let minecraft_dir = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
+            .join(".minecraft");
 
         Ok(Self {
             versions_dir: minecraft_dir.join("versions"),
@@ -22,6 +24,4 @@ impl LauncherConfig {
             minecraft_dir,
         })
     }
-
-
 }
