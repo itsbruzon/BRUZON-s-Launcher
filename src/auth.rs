@@ -42,7 +42,6 @@ struct DeviceCodeResponse {
 struct TokenResponse {
     access_token: Option<String>,
     refresh_token: Option<String>,
-    expires_in: Option<u64>,
     error: Option<String>,
     error_description: Option<String>,
 }
