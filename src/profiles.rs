@@ -1,23 +1,10 @@
-use crate::auth::{complete_device_login, load_accounts, offline_account, request_device_code, save_accounts, save_selected_account, AccountType, DeviceCode, MinecraftAccount};
+use crate::auth::{accounts_path, complete_device_login, load_accounts, offline_account, request_device_code, save_accounts, save_selected_account, selected_account_path, AccountType, DeviceCode, MinecraftAccount};
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Entry, Label, Orientation, Separator};
 use std::cell::RefCell;
-use std::path::PathBuf;
 use std::rc::Rc;
 use tokio::runtime::Runtime;
-
-fn accounts_dir() -> PathBuf {
-    dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("BLauncher")
-}
-
-fn accounts_path() -> PathBuf {
-    accounts_dir().join("accounts.json")
-}
-
-fn selected_account_path() -> PathBuf {
-    accounts_dir().join("selected_account")
-}
 
 pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
     let dialog = gtk4::Window::builder()
@@ -128,7 +115,6 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                 }
 
                 let account_id = account.id.clone();
-                let accounts_for_select = accounts.clone();
                 let selected_for_select = selected.clone();
                 let status_for_select = status.clone();
                 let rt_for_select = rt.clone();
@@ -137,7 +123,6 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                     let selected_id = account_id.clone();
                     let status = status_for_select.clone();
                     let rt = rt_for_select.clone();
-                    let _ = accounts_for_select.borrow();
                     glib::MainContext::default().spawn_local(async move {
                         match rt.spawn(async move { save_selected_account(&selected_account_path(), Some(&selected_id)).await }).await {
                             Ok(Ok(())) => status.set_text("Account selected. Instances will use it on launch."),
