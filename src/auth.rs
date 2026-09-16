@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use tokio::fs;
 use tokio::time::{sleep, Duration};
 
 const PRISM_MSA_CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
@@ -15,6 +16,8 @@ pub struct MinecraftAccount {
     pub access_token: String,
     pub refresh_token: Option<String>,
     pub expires_at: u64,
+    #[serde(default)]
+    pub skin_url: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +42,7 @@ struct DeviceCodeResponse {
 struct TokenResponse {
     access_token: Option<String>,
     refresh_token: Option<String>,
+    expires_in: Option<u64>,
     error: Option<String>,
     error_description: Option<String>,
 }
@@ -62,19 +66,45 @@ struct XuiClaim {
 }
 
 #[derive(Debug, Deserialize)]
-struct MinecraftResponse {
+struct MinecraftLoginResponse {
     access_token: String,
-    expires_in: u64,
+    expires_in: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
-struct MinecraftProfile {
-    id: String,
+struct MinecraftEntitlements {
+    #[serde(default)]
+    items: Vec<MinecraftEntitlement>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MinecraftEntitlement {
     name: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct MinecraftProfile {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub skins: Vec<MinecraftSkin>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MinecraftSkin {
+    pub url: String,
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 pub async fn request_device_code() -> Result<DeviceCode> {
-    let response = Client::new()
+    let client = Client::new();
+    let response = client
         .post(DEVICE_CODE_URL)
         .form(&[
             ("client_id", PRISM_MSA_CLIENT_ID),
@@ -82,70 +112,89 @@ pub async fn request_device_code() -> Result<DeviceCode> {
         ])
         .send()
         .await?
-        .error_for_status()?
-        .json::<DeviceCodeResponse>()
-        .await?;
+        .error_for_status()?;
+
+    let data: DeviceCodeResponse = response.json().await?;
 
     Ok(DeviceCode {
-        device_code: response.device_code,
-        user_code: response.user_code,
-        verification_uri: response.verification_uri,
-        expires_in: response.expires_in,
-        interval: response.interval.unwrap_or(5).max(1),
+        device_code: data.device_code,
+        user_code: data.user_code,
+        verification_uri: data.verification_uri,
+        expires_in: data.expires_in,
+        interval: data.interval.unwrap_or(5),
     })
 }
 
-pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccount> {
+async fn poll_microsoft_token(device: &DeviceCode) -> Result<TokenResponse> {
     let client = Client::new();
-    let deadline = std::time::Instant::now() + Duration::from_secs(device.expires_in);
-    let mut interval = device.interval;
+    let deadline = now_unix().saturating_add(device.expires_in);
+    let mut interval = device.interval.max(1);
 
-    let msa_token = loop {
-        if std::time::Instant::now() >= deadline {
-            return Err(anyhow!("Microsoft device-code login expired"));
+    loop {
+        if now_unix() >= deadline {
+            return Err(anyhow!("Microsoft sign-in timed out. Please try again."));
         }
 
-        sleep(Duration::from_secs(interval)).await;
-        let token = client
+        let response = client
             .post(TOKEN_URL)
             .form(&[
                 ("client_id", PRISM_MSA_CLIENT_ID),
-                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+                (
+                    "grant_type",
+                    "urn:ietf:params:oauth:grant-type:device_code",
+                ),
                 ("device_code", device.device_code.as_str()),
             ])
             .send()
-            .await?
-            .json::<TokenResponse>()
             .await?;
 
-        if let Some(access_token) = token.access_token {
-            break (access_token, token.refresh_token);
+        let status = response.status();
+        let token: TokenResponse = response.json().await?;
+
+        if status.is_success() {
+            return Ok(token);
         }
 
         match token.error.as_deref() {
-            Some("authorization_pending") => continue,
+            Some("authorization_pending") => {
+                sleep(Duration::from_secs(interval)).await;
+            }
             Some("slow_down") => {
-                interval += 5;
-                continue;
+                interval = interval.saturating_add(5);
+                sleep(Duration::from_secs(interval)).await;
             }
             Some(error) => {
                 return Err(anyhow!(
-                    "Microsoft login failed: {}",
-                    token.error_description.unwrap_or_else(|| error.to_string())
+                    "Microsoft sign-in failed: {}",
+                    token
+                        .error_description
+                        .as_deref()
+                        .unwrap_or(error)
                 ));
             }
-            None => return Err(anyhow!("Microsoft returned an invalid token response")),
+            None => {
+                return Err(anyhow!("Microsoft sign-in failed: HTTP {}", status));
+            }
         }
-    };
+    }
+}
 
-    let xbox = client
+pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccount> {
+    let microsoft = poll_microsoft_token(&device).await?;
+    let microsoft_access_token = microsoft
+        .access_token
+        .ok_or_else(|| anyhow!("Microsoft did not return an access token"))?;
+
+    let client = Client::new();
+
+    let xbox_response = client
         .post("https://user.auth.xboxlive.com/user/authenticate")
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({
             "Properties": {
                 "AuthMethod": "RPS",
                 "SiteName": "user.auth.xboxlive.com",
-                "RpsTicket": format!("d={}", msa_token.0),
+                "RpsTicket": format!("d={}", microsoft_access_token)
             },
             "RelyingParty": "http://auth.xboxlive.com",
             "TokenType": "JWT"
@@ -156,15 +205,21 @@ pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccoun
         .json::<XboxResponse>()
         .await?;
 
-    let uhs = xbox.display_claims.xui.first().map(|claim| claim.uhs.clone())
+    let uhs = xbox_response
+        .display_claims
+        .xui
+        .first()
+        .map(|claim| claim.uhs.clone())
         .ok_or_else(|| anyhow!("Xbox Live did not return a user hash"))?;
 
-    let xsts = client
+    let xsts_response = client
         .post("https://xsts.auth.xboxlive.com/xsts/authorize")
         .header("Content-Type", "application/json")
-        .header("x-xbl-contract-version", "1")
         .json(&serde_json::json!({
-            "Properties": { "SandboxId": "RETAIL", "UserTokens": [xbox.token] },
+            "Properties": {
+                "SandboxId": "RETAIL",
+                "UserTokens": [xbox_response.token]
+            },
             "RelyingParty": "rp://api.minecraftservices.com/",
             "TokenType": "JWT"
         }))
@@ -178,49 +233,80 @@ pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccoun
         .post("https://api.minecraftservices.com/authentication/login_with_xbox")
         .header("Content-Type", "application/json")
         .json(&serde_json::json!({
-            "identityToken": format!("XBL3.0 x={};{}", uhs, xsts.token)
+            "identityToken": format!("XBL3.0 x={};{}", uhs, xsts_response.token)
         }))
         .send()
         .await?
         .error_for_status()?
-        .json::<MinecraftResponse>()
+        .json::<MinecraftLoginResponse>()
         .await?;
 
-    let profile = client
-        .get("https://api.minecraftservices.com/minecraft/profile")
+    let entitlements = client
+        .get("https://api.minecraftservices.com/entitlements/mcstore")
         .bearer_auth(&minecraft.access_token)
         .send()
         .await?
         .error_for_status()?
-        .json::<MinecraftProfile>()
+        .json::<MinecraftEntitlements>()
         .await?;
 
+    let owns_minecraft = entitlements
+        .items
+        .iter()
+        .any(|item| item.name == "product_minecraft" || item.name == "game_minecraft");
+
+    if !owns_minecraft {
+        return Err(anyhow!(
+            "This Microsoft account does not have a Minecraft Java Edition entitlement."
+        ));
+    }
+
+    let profile_response = client
+        .get("https://api.minecraftservices.com/minecraft/profile")
+        .bearer_auth(&minecraft.access_token)
+        .send()
+        .await?;
+
+    if profile_response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err(anyhow!(
+            "Minecraft profile was not found for this account. The account may own Minecraft but not have a Java profile yet."
+        ));
+    }
+
+    let profile = profile_response.error_for_status()?.json::<MinecraftProfile>().await?;
+
     Ok(MinecraftAccount {
-        id: profile.id,
+        id: profile.id.clone(),
         name: profile.name,
         access_token: minecraft.access_token,
-        refresh_token: msa_token.1,
-        expires_at: now_unix() + minecraft.expires_in,
+        refresh_token: microsoft.refresh_token,
+        expires_at: now_unix().saturating_add(minecraft.expires_in.unwrap_or(3600)),
+        skin_url: profile.skins.first().map(|skin| skin.url.clone()),
     })
 }
 
 pub async fn save_accounts(path: &Path, accounts: &[MinecraftAccount]) -> Result<()> {
-    if let Some(parent) = path.parent() { tokio::fs::create_dir_all(parent).await?; }
-    tokio::fs::write(path, serde_json::to_vec_pretty(accounts)?).await?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
+
+    let data = serde_json::to_vec_pretty(accounts)?;
+    fs::write(path, data).await?;
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
+        fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
     }
+
     Ok(())
 }
 
 pub async fn load_accounts(path: &Path) -> Result<Vec<MinecraftAccount>> {
-    if !tokio::fs::try_exists(path).await.unwrap_or(false) { return Ok(Vec::new()); }
-    Ok(serde_json::from_slice(&tokio::fs::read(path).await?).unwrap_or_default())
-}
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
 
-pub fn now_unix() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs()).unwrap_or(0)
+    let data = fs::read(path).await?;
+    Ok(serde_json::from_slice(&data)?)
 }
