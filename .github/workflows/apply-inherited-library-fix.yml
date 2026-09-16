@@ -1,0 +1,70 @@
+name: Apply inherited library fix
+
+on:
+  push:
+    branches:
+      - tmp/apply-26-2-fix
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply fix and commit
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/launcher.rs')
+          s = p.read_text()
+
+          old = '''        let natives_version = version_json.inherits_from.as_deref().unwrap_or(version);
+        let natives_dir = self
+            .config
+            .versions_dir
+            .join(natives_version)
+            .join("natives");
+
+        self.library_manager
+            .check_and_extract_natives(natives_version)
+            .await?;
+
+        self.library_manager
+            .check_and_download_libraries(natives_version)
+            .await?;'''
+
+          new = '''        let natives_dir = self
+            .config
+            .versions_dir
+            .join(version)
+            .join("natives");
+
+        self.library_manager
+            .check_and_extract_natives(version)
+            .await?;
+
+        self.library_manager
+            .check_and_download_libraries(version)
+            .await?;'''
+
+          if old not in s:
+              raise SystemExit('Expected launcher block was not found; refusing to modify the file.')
+
+          p.write_text(s.replace(old, new, 1))
+          PY
+
+          rm .github/workflows/apply-inherited-library-fix.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/launcher.rs .github/workflows/apply-inherited-library-fix.yml
+          git commit -m 'Fix library resolution for inherited Minecraft versions'
+          git push origin HEAD:tmp/apply-26-2-fix
