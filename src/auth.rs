@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::time::{sleep, Duration};
 
@@ -116,6 +116,20 @@ fn now_unix() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+pub fn accounts_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("BLauncher")
+}
+
+pub fn accounts_path() -> PathBuf {
+    accounts_dir().join("accounts.json")
+}
+
+pub fn selected_account_path() -> PathBuf {
+    accounts_dir().join("selected_account")
 }
 
 pub fn offline_account(name: String) -> MinecraftAccount {
@@ -268,7 +282,10 @@ pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccoun
         .bearer_auth(&minecraft.access_token)
         .send()
         .await?;
-    let entitlements = entitlements_response.error_for_status()?.json::<MinecraftEntitlements>().await?;
+    let entitlements = entitlements_response
+        .error_for_status()?
+        .json::<MinecraftEntitlements>()
+        .await?;
 
     let owns_minecraft = entitlements.items.iter().any(|item| {
         matches!(item.name.as_str(), "product_minecraft" | "game_minecraft")
