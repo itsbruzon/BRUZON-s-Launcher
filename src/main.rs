@@ -6,7 +6,6 @@ mod launcher;
 mod minecraft_rpc;
 mod library_manager;
 mod models;
-mod profiles;
 mod settings;
 mod ui;
 mod utils;
