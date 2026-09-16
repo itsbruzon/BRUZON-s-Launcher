@@ -1,5 +1,4 @@
 use crate::launcher::MinecraftLauncher;
-use crate::minecraft_rpc::MinecraftRpc;
 use crate::models::{MinecraftVersion, Profile, Section};
 use crate::settings::Settings;
 use relm4::{ComponentSender, gtk};
@@ -70,6 +69,4 @@ pub struct AppModel {
 
     // Shared Tokio Runtime
     pub rt: std::sync::Arc<tokio::runtime::Runtime>,
-
-    pub discord_rpc: MinecraftRpc,
 }
