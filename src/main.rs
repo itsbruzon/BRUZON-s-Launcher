@@ -16,10 +16,10 @@ use ui::AppModel;
 
 fn main() {
     let app = Application::builder()
-        .application_id("dev.vdkv.RCraft")
+        .application_id("dev.bruzon.BLauncher")
         .build();
 
-    glib::set_application_name("RCraft");
+    glib::set_application_name("BRUZON's Launcher");
 
     let relm_app = RelmApp::from_app(app);
     relm_app.run::<AppModel>(())
