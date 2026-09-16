@@ -7,6 +7,7 @@ pub struct LauncherConfig {
     pub versions_dir: PathBuf,
     pub assets_dir: PathBuf,
     pub libraries_dir: PathBuf,
+    #[allow(dead_code)]
     pub instances_dir: PathBuf,
 }
 
