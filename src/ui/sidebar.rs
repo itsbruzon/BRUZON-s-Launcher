@@ -2,10 +2,10 @@ use crate::models::Section;
 use crate::profiles::open_profiles_dialog;
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
-use gtk::prelude::*;
+use adw::NavigationPage;
+use adw::prelude::*;
 use relm4::ComponentSender;
 use relm4::gtk;
-use adw::NavigationPage;
 
 pub fn create_sidebar(
     sender: &ComponentSender<AppModel>,
@@ -64,18 +64,18 @@ pub fn create_sidebar(
     let (logs_button, logs_label, logs_box) = create_nav_button("Logs", "utilities-terminal-symbolic");
     logs_button.set_visible(false);
 
-    let (accounts_button, accounts_label, accounts_box) = create_nav_button("Accounts", "avatar-default-symbolic");
-    accounts_button.set_tooltip_text(Some("Manage Microsoft and offline accounts"));
-    accounts_button.set_margin_top(6);
-    accounts_button.set_margin_bottom(6);
-    let accounts_sender = sender.clone();
-    accounts_button.connect_clicked(move |_| {
-        let _ = &accounts_sender;
+    // Profiles is the account manager. Accounts are deliberately kept separate
+    // from instances: an instance never stores which account launched it.
+    let (profiles_button, profiles_label, profiles_box) =
+        create_nav_button("Profiles", "avatar-default-symbolic");
+    profiles_button.set_tooltip_text(Some("Manage Microsoft and offline accounts"));
+    let profiles_sender = sender.clone();
+    profiles_button.connect_clicked(move |_| {
+        let _ = &profiles_sender;
         open_profiles_dialog(None);
     });
-    // Keep the account button visually consistent when the sidebar is collapsed.
-    accounts_label.set_visible(true);
-    accounts_box.set_halign(gtk::Align::Start);
+    profiles_label.set_visible(true);
+    profiles_box.set_halign(gtk::Align::Start);
 
     let sender_clone = sender.clone();
     home_button.connect_clicked(move |_| sender_clone.input(AppMsg::NavigateToSection(Section::Home)));
@@ -94,7 +94,7 @@ pub fn create_sidebar(
     let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     spacer.set_vexpand(true);
     sidebar_content.append(&spacer);
-    sidebar_content.append(&accounts_button);
+    sidebar_content.append(&profiles_button);
 
     let version_label = gtk::Label::builder()
         .label("v0.1-dev")
