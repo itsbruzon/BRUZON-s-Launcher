@@ -1,4 +1,5 @@
 use crate::models::Section;
+use crate::profiles::open_profiles_dialog;
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
 use gtk::prelude::*;
@@ -37,7 +38,6 @@ pub fn create_sidebar(
         .margin_end(12)
         .build();
 
-    // Helper to create a styled button with icon and label
     let create_nav_button =
         |label_text: &str, icon_name: &str| -> (gtk::Button, gtk::Label, gtk::Box) {
             let button = gtk::Button::builder()
@@ -51,24 +51,16 @@ pub fn create_sidebar(
             let box_container = gtk::Box::builder()
                 .orientation(gtk::Orientation::Horizontal)
                 .spacing(12)
-                .halign(gtk::Align::Start) // Default left align
+                .halign(gtk::Align::Start)
                 .build();
-
             let icon = gtk::Image::builder().icon_name(icon_name).build();
-
-            let label = gtk::Label::builder()
-                .label(label_text)
-                .visible(true)
-                .build();
-
+            let label = gtk::Label::builder().label(label_text).visible(true).build();
             box_container.append(&icon);
             box_container.append(&label);
-
             button.set_child(Some(&box_container));
             (button, label, box_container)
         };
 
-    // Navigation buttons
     let (home_button, home_label, home_box) = create_nav_button("Home", "user-home-symbolic");
     let (create_button, create_label, create_box) =
         create_nav_button("New Profile", "list-add-symbolic");
@@ -76,43 +68,43 @@ pub fn create_sidebar(
         create_nav_button("Settings", "emblem-system-symbolic");
     let (logs_button, logs_label, logs_box) =
         create_nav_button("Logs", "utilities-terminal-symbolic");
-
-    // Logs button (hidden by default)
     logs_button.set_visible(false);
 
-    // Connect button signals
+    let profiles_button = create_nav_button("Profiles", "avatar-default-symbolic").0;
+    profiles_button.set_tooltip_text(Some("Microsoft accounts"));
+    let profiles_sender = sender.clone();
+    profiles_button.connect_clicked(move |_| {
+        let _ = &profiles_sender;
+        open_profiles_dialog(None);
+    });
+
     let sender_clone = sender.clone();
     home_button.connect_clicked(move |_| {
         sender_clone.input(AppMsg::NavigateToSection(Section::Home));
     });
-
     let sender_clone = sender.clone();
     create_button.connect_clicked(move |_| {
         sender_clone.input(AppMsg::NavigateToSection(Section::CreateInstance));
     });
-
     let sender_clone = sender.clone();
     settings_button.connect_clicked(move |_| {
         sender_clone.input(AppMsg::NavigateToSection(Section::Settings));
     });
-
     let sender_clone = sender.clone();
     logs_button.connect_clicked(move |_| {
         sender_clone.input(AppMsg::NavigateToSection(Section::Logs));
     });
 
-    // Add buttons to sidebar (Home > Create > Settings)
     sidebar_content.append(&home_button);
     sidebar_content.append(&create_button);
     sidebar_content.append(&logs_button);
     sidebar_content.append(&settings_button);
 
-    // Add spacer to push content to top
     let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     spacer.set_vexpand(true);
     sidebar_content.append(&spacer);
+    sidebar_content.append(&profiles_button);
 
-    // Version Label
     let version_label = gtk::Label::builder()
         .label("v1.1")
         .css_classes(vec!["dim-label".to_string(), "subtitle".to_string()])
@@ -120,15 +112,12 @@ pub fn create_sidebar(
         .build();
     sidebar_content.append(&version_label);
 
-    // Create navigation page
     let sidebar_page = adw::NavigationPage::builder()
         .title("Navigation")
         .child(&sidebar_content)
         .vexpand(true)
         .hexpand(true)
         .build();
-
-    // Remove any default background from NavigationPage
     sidebar_page.set_css_classes(&["flat"]);
 
     (
