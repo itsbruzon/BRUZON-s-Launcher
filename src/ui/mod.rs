@@ -4,6 +4,7 @@ pub mod loading;
 pub mod logs;
 pub mod model;
 pub mod msg;
+pub mod profiles;
 pub mod settings;
 pub mod sidebar;
 pub mod widgets;
@@ -28,6 +29,7 @@ use crate::ui::home::{create_home_page, update_profile_list};
 use crate::ui::loading::create_loading_widgets;
 use crate::ui::logs::create_logs_page;
 use crate::ui::model::AppState;
+use crate::ui::profiles::create_profiles_page;
 use crate::ui::settings::create_settings_page;
 use crate::ui::sidebar::create_sidebar;
 use crate::ui::widgets::AppWidgets;
@@ -215,6 +217,7 @@ impl SimpleComponent for AppModel {
             &ram_scale,
             &fabric_switch,
         );
+        let profiles_page = create_profiles_page(model.rt.clone());
         let (settings_page, theme_combo) = create_settings_page(
             &sender,
             &hide_logs_switch,
@@ -224,6 +227,7 @@ impl SimpleComponent for AppModel {
 
         content_stack.add_titled(&home_page, Some("home"), "Home");
         content_stack.add_titled(&create_page, Some("create"), "Create");
+        content_stack.add_titled(&profiles_page, Some("profiles"), "Profiles");
         content_stack.add_titled(&settings_page, Some("settings"), "Settings");
         content_stack.add_titled(&logs_page, Some("logs"), "Logs");
         content_stack.add_titled(&loading_widgets.0, Some("loading"), "Loading");
