@@ -1,3 +1,4 @@
+use crate::auth::selected_account_path;
 use crate::models::Profile;
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
@@ -122,7 +123,20 @@ fn create_profile_row(
         .build();
     let sender_clone = sender.clone();
     let name_clone = name.to_string();
-    launch_button.connect_clicked(move |_| sender_clone.input(AppMsg::LaunchProfile(name_clone.clone())));
+    launch_button.connect_clicked(move |_| {
+        let has_selected_account = std::fs::read_to_string(selected_account_path())
+            .map(|id| !id.trim().is_empty())
+            .unwrap_or(false);
+
+        if has_selected_account {
+            sender_clone.input(AppMsg::LaunchProfile(name_clone.clone()));
+        } else {
+            sender_clone.input(AppMsg::Error(
+                "You need to add and select an account before you can launch Minecraft."
+                    .to_string(),
+            ));
+        }
+    });
 
     let delete_button = gtk::Button::builder()
         .icon_name("user-trash-symbolic")
