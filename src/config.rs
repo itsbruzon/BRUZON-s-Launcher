@@ -16,7 +16,6 @@ impl LauncherConfig {
             .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?
             .join(".minecraft");
         let instances_dir = minecraft_dir.join("instances");
-        std::fs::create_dir_all(&instances_dir)?;
 
         Ok(Self {
             versions_dir: minecraft_dir.join("versions"),
