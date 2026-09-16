@@ -89,24 +89,10 @@ pub struct AssetIndexFile {
     pub objects: HashMap<String, AssetObject>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Profile {
-    pub username: String,
-    pub version: String,
-    pub ram_mb: u32,
-    #[serde(default)]
-    pub playtime_seconds: u64,
-    #[serde(default)]
-    pub last_launch: Option<u64>,
-    #[serde(default)]
-    pub is_fabric: bool,
-    #[serde(default)]
-    pub game_dir: Option<String>,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Section {
     Home,
+    Profiles,
     CreateInstance,
     Settings,
     Logs,
