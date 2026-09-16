@@ -8,7 +8,6 @@ use relm4::gtk;
 pub fn create_settings_page(
     sender: &ComponentSender<AppModel>,
     hide_logs_switch: &adw::SwitchRow,
-    discord_presence_switch: &adw::SwitchRow,
 ) -> (gtk::ScrolledWindow, adw::ComboRow) {
     let scrolled_window = gtk::ScrolledWindow::builder()
         .hexpand(true)
@@ -53,16 +52,6 @@ pub fn create_settings_page(
         sender_clone.input(AppMsg::ToggleHideLogs(switch.is_active()));
     });
 
-    discord_presence_switch.set_title("Discord Rich Presence");
-    discord_presence_switch.set_subtitle("Show Minecraft status in Discord (requires Discord to be running)");
-    discord_presence_switch.set_hexpand(true);
-    discord_presence_switch.set_halign(gtk::Align::Fill);
-
-    let sender_clone = sender.clone();
-    discord_presence_switch.connect_active_notify(move |switch| {
-        sender_clone.input(AppMsg::ToggleDiscordPresence(switch.is_active()));
-    });
-
     // Theme selection
     let theme_row = adw::ComboRow::builder()
         .title("Theme")
@@ -103,14 +92,12 @@ pub fn create_settings_page(
     });
 
     folder_row.add_suffix(&folder_button);
-
     folder_row.set_activatable(false);
 
     // Add rows to list box
     settings_list.append(&theme_row);
     settings_list.append(&folder_row);
     settings_list.append(hide_logs_switch);
-    settings_list.append(discord_presence_switch);
 
     // Add list box to main content
     content_container.append(&settings_list);
