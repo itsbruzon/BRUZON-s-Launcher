@@ -21,6 +21,7 @@ adw = { version = "0.7", package = "libadwaita", features = ["v1_2", "v1_4"] }
 futures = "0.3.31"
 dirs = "5.0"
 open = "5.0"
+discordipc = "0.1.1"
 
 
 [profile.release]

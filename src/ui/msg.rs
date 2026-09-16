@@ -21,6 +21,7 @@ pub enum AppMsg {
     OpenMinecraftFolder,
     ThemeSelected(Theme),
     ToggleHideLogs(bool),
+    ToggleDiscordPresence(bool),
     ToggleSidebar,
     Log(String),
     Error(String),

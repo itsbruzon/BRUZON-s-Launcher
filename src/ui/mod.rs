@@ -13,8 +13,6 @@ pub use msg::AppMsg;
 
 use adw::prelude::*;
 use relm4::gtk;
-use relm4::prelude::*;
-// use gtk::prelude::*;
 use relm4::{ComponentParts, ComponentSender, SimpleComponent};
 use std::collections::HashMap;
 use tokio::io::AsyncBufReadExt;
@@ -22,6 +20,7 @@ use tokio::io::BufReader;
 use tokio::runtime::Runtime;
 
 use crate::launcher::MinecraftLauncher;
+use crate::minecraft_rpc::{MinecraftRpc, RpcPresence};
 use crate::models::{Profile, Section, Theme};
 use crate::settings::Settings;
 use crate::ui::create::create_create_instance_page;
@@ -133,6 +132,7 @@ impl SimpleComponent for AppModel {
             toast_overlay: None,
             sender: sender.clone(),
             rt: std::sync::Arc::new(Runtime::new().unwrap()),
+            discord_rpc: MinecraftRpc::start(),
         };
 
         // Set window title
@@ -200,6 +200,8 @@ impl SimpleComponent for AppModel {
             .build();
 
         let hide_logs_switch = adw::SwitchRow::builder().title("Hide Console").build();
+        let discord_presence_switch =
+            adw::SwitchRow::builder().title("Discord Rich Presence").build();
 
         let profile_list = gtk::ListBox::new();
         let loading_widgets = create_loading_widgets();
@@ -213,7 +215,11 @@ impl SimpleComponent for AppModel {
             &ram_scale,
             &fabric_switch,
         );
-        let (settings_page, theme_combo) = create_settings_page(&sender, &hide_logs_switch);
+        let (settings_page, theme_combo) = create_settings_page(
+            &sender,
+            &hide_logs_switch,
+            &discord_presence_switch,
+        );
         let (logs_page, logs_view) = create_logs_page(&sender, &model.logs);
 
         content_stack.add_titled(&home_page, Some("home"), "Home");
@@ -324,6 +330,7 @@ impl SimpleComponent for AppModel {
             fabric_switch,
 
             hide_logs_switch,
+            discord_presence_switch,
             launch_button: gtk::Button::with_label("Launch"),
             create_button: gtk::Button::with_label("Create"),
             delete_button: gtk::Button::with_label("Delete"),
@@ -419,10 +426,20 @@ impl SimpleComponent for AppModel {
                 let sender = self.sender.clone();
                 // Apply immediately
                 sender.input(AppMsg::ThemeSelected(theme));
+                self.apply_discord_presence(RpcPresence::InLauncher);
             }
             AppMsg::ToggleHideLogs(hide) => {
                 self.settings.hide_logs = hide;
                 self.save_settings();
+            }
+            AppMsg::ToggleDiscordPresence(enabled) => {
+                self.settings.discord_presence = enabled;
+                self.save_settings();
+                if enabled {
+                    self.apply_discord_presence(RpcPresence::InLauncher);
+                } else {
+                    self.apply_discord_presence(RpcPresence::Disabled);
+                }
             }
             AppMsg::ToggleSidebar => {
                 self.sidebar_collapsed = !self.sidebar_collapsed;
@@ -478,18 +495,8 @@ impl SimpleComponent for AppModel {
                             version: profile_clone.version.clone(),
                         };
                         let profile_name_clone = profile_name.clone();
-
-                        std::thread::spawn(move || {
-                            let rt = tokio::runtime::Runtime::new().unwrap(); // Should use shared runtime, but we inside update which is sync.
-                            // We can use self.rt if we clone it? We can't access self inside closure.
-                            // But we are in `update`, which has `&mut self`.
-                            // So we shouldn't use std::thread::spawn at all.
-                            // We should use self.rt.spawn.
-                            // But we are in a match arm block where we can't easily change the structure
-                            // effectively in this replacement_chunk without referencing `self`.
-                            // Wait, the block above `if let Some(profile)` allows us to access `self.rt`.
-                            // But `AppMsg::LaunchProfile` implementation is huge.
-                            // I will replace the whole block.
+                        self.apply_discord_presence(RpcPresence::Launching {
+                            version: profile_clone.version.clone(),
                         });
 
                         let rt = self.rt.clone();
@@ -571,6 +578,7 @@ impl SimpleComponent for AppModel {
                         version: version.clone(),
                     };
                 }
+                self.apply_discord_presence(RpcPresence::Clear);
             }
             AppMsg::DownloadProgress(progress, status) => {
                 if let AppState::Downloading { version, .. } = &self.state {
@@ -585,6 +593,7 @@ impl SimpleComponent for AppModel {
                 self.state = AppState::Ready {
                     current_section: Section::Home,
                 };
+                self.apply_discord_presence(RpcPresence::InLauncher);
             }
             AppMsg::UsernameChanged(username) => {
                 self.input_username = username;
@@ -812,6 +821,9 @@ impl SimpleComponent for AppModel {
         // Common updates
         widgets.logs_button.set_visible(!self.settings.hide_logs);
         widgets.hide_logs_switch.set_active(self.settings.hide_logs);
+        widgets
+            .discord_presence_switch
+            .set_active(self.settings.discord_presence);
 
         let theme_index = match self.settings.theme {
             Theme::System => 0,
@@ -848,6 +860,14 @@ impl SimpleComponent for AppModel {
 
 // Helpers for model to keep update() cleaner
 impl AppModel {
+    fn apply_discord_presence(&self, presence: RpcPresence) {
+        if self.settings.discord_presence {
+            self.discord_rpc.update(presence);
+        } else {
+            self.discord_rpc.update(RpcPresence::Disabled);
+        }
+    }
+
     fn save_settings(&self) {
         if let Some(launcher) = &self.launcher {
             let config_dir = launcher.config.minecraft_dir.clone();

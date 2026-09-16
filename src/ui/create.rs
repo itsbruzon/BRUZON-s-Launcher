@@ -2,7 +2,6 @@ use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
 use adw::prelude::*;
 use adw::{ComboRow, EntryRow, SpinRow};
-use gtk::prelude::*;
 use relm4::ComponentSender;
 use relm4::gtk;
 

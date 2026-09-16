@@ -142,6 +142,7 @@ pub struct VersionJson {
     #[serde(rename = "inheritsFrom")]
     pub inherits_from: Option<String>,
     #[serde(rename = "javaVersion")]
+    #[allow(dead_code)]
     pub java_version: Option<JavaVersion>,
     #[serde(default)]
     pub libraries: Vec<Library>,
@@ -168,6 +169,7 @@ pub struct DownloadFile {
 }
 
 #[derive(Deserialize, Debug, Clone)]
+#[allow(dead_code)]
 pub struct JavaVersion {
     #[serde(rename = "majorVersion")]
     pub major_version: u32,

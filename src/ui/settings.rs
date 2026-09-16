@@ -2,13 +2,13 @@ use crate::models::Theme;
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
 use adw::prelude::*;
-use gtk::prelude::*;
 use relm4::ComponentSender;
 use relm4::gtk;
 
 pub fn create_settings_page(
     sender: &ComponentSender<AppModel>,
     hide_logs_switch: &adw::SwitchRow,
+    discord_presence_switch: &adw::SwitchRow,
 ) -> (gtk::ScrolledWindow, adw::ComboRow) {
     let scrolled_window = gtk::ScrolledWindow::builder()
         .hexpand(true)
@@ -51,6 +51,16 @@ pub fn create_settings_page(
     let sender_clone = sender.clone();
     hide_logs_switch.connect_active_notify(move |switch| {
         sender_clone.input(AppMsg::ToggleHideLogs(switch.is_active()));
+    });
+
+    discord_presence_switch.set_title("Discord Rich Presence");
+    discord_presence_switch.set_subtitle("Show Minecraft status in Discord (requires Discord to be running)");
+    discord_presence_switch.set_hexpand(true);
+    discord_presence_switch.set_halign(gtk::Align::Fill);
+
+    let sender_clone = sender.clone();
+    discord_presence_switch.connect_active_notify(move |switch| {
+        sender_clone.input(AppMsg::ToggleDiscordPresence(switch.is_active()));
     });
 
     // Theme selection
@@ -100,6 +110,7 @@ pub fn create_settings_page(
     settings_list.append(&theme_row);
     settings_list.append(&folder_row);
     settings_list.append(hide_logs_switch);
+    settings_list.append(discord_presence_switch);
 
     // Add list box to main content
     content_container.append(&settings_list);

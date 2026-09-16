@@ -29,7 +29,7 @@ With a focus on speed, aesthetics, and usability, RCraft integrates perfectly wi
 - **Smart Version Management**: Easily download and launch any Minecraft version.
 - **Profile System**: Create and manage multiple isolated game profiles with custom settings.
 - **Performance First**: Lightweight footprint and fast startup times powered by Rust.
-- **Auto-Java Management**: Automatically downloads and configures the exact Java version required for each Minecraft instance, ensuring perfect compatibility.
+- **Native Discord Rich Presence**: Shows official Minecraft status in Discord while you use the launcher (uses Minecraft's Discord application ID; requires Discord to be running).
 
 ## Usage
 

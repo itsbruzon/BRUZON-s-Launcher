@@ -25,7 +25,7 @@ pub struct MinecraftLauncher {
 impl MinecraftLauncher {
     pub fn new() -> Result<Self> {
         let config = LauncherConfig::new()?;
-        let java_manager = JavaManager::new(config.runtimes_dir.clone());
+        let java_manager = JavaManager::new();
         let library_manager = LibraryManager::new(config.versions_dir.clone());
         Ok(Self {
             config,
@@ -46,95 +46,6 @@ impl MinecraftLauncher {
             .collect();
 
         Ok(release_versions)
-    }
-
-    pub async fn get_required_java_version(&self, version: &str) -> Result<u32> {
-        let version_dir = self.config.versions_dir.join(version);
-        let version_file = version_dir.join(format!("{}.json", version));
-
-        if !version_file.exists() {
-            // Fallback heuristic if file not found (e.g. before download?)
-            // Should not happen as we download first.
-            // Should not happen as we download first.
-            // But let's assume standard heuristic
-            let version_id = if version.contains("fabric")
-                || version.contains("quilt")
-                || version.contains("forge")
-            {
-                version.split('-').last().unwrap_or(version)
-            } else {
-                version
-            };
-
-            let parts: Vec<&str> = version_id.split('.').collect();
-            if parts.len() >= 2 {
-                if let Ok(minor) = parts[1].parse::<u32>() {
-                    if minor >= 20 {
-                        if parts.len() >= 3 {
-                            if let Ok(sub) = parts[2].parse::<u32>() {
-                                if minor == 20 && sub >= 5 {
-                                    return Ok(21);
-                                } else if minor > 20 {
-                                    return Ok(21);
-                                }
-                            }
-                        }
-                        return Ok(17);
-                    } else if minor >= 18 {
-                        return Ok(17);
-                    } else if minor == 17 {
-                        return Ok(16);
-                    }
-                }
-            }
-            return Ok(8);
-        }
-
-        let version_data = fs::read_to_string(&version_file).await?;
-        let version_json: VersionJson = serde_json::from_str(&version_data)?;
-
-        // Check java_version field
-        if let Some(v) = version_json.java_version {
-            return Ok(v.major_version);
-        }
-
-        if let Some(parent_id) = version_json.inherits_from {
-            // Recursive check
-            return Box::pin(self.get_required_java_version(&parent_id)).await;
-        }
-
-        // Fallback heuristic check on the ID itself if it looks like a vanilla version
-        let version_id =
-            if version.contains("fabric") || version.contains("quilt") || version.contains("forge")
-            {
-                version.split('-').last().unwrap_or(version)
-            } else {
-                version
-            };
-
-        let parts: Vec<&str> = version_id.split('.').collect();
-        if parts.len() >= 2 {
-            if let Ok(minor) = parts[1].parse::<u32>() {
-                if minor >= 20 {
-                    if parts.len() >= 3 {
-                        if let Ok(sub) = parts[2].parse::<u32>() {
-                            if minor == 20 && sub >= 5 {
-                                return Ok(21);
-                            } else if minor > 20 {
-                                return Ok(21);
-                            }
-                        }
-                    }
-                    return Ok(17);
-                } else if minor >= 18 {
-                    return Ok(17);
-                } else if minor == 17 {
-                    return Ok(16);
-                }
-            }
-        }
-
-        Ok(8) // Default for older versions without java_version field
     }
 
     pub async fn build_classpath(&self, start_version: &str) -> Result<String> {
@@ -345,9 +256,6 @@ impl MinecraftLauncher {
                                 let current = processed_count.fetch_add(1, Ordering::SeqCst) + 1;
                                 if current % 50 == 0 || current == total_items {
                                     if let Some(cb) = &on_progress {
-                                        let pct = (current as f64 / total_items as f64) * 100.0; // using 0-100 logic or 0-1? usage suggests 0-1
-                                        // Actually existing usage in java_manager seems to be 0.0-1.0
-                                        // But let's check prepare_java usage: 0.1, 0.7... so 0.0-1.0
                                         cb(
                                             current as f64 / total_items as f64,
                                             format!(
@@ -403,8 +311,7 @@ impl MinecraftLauncher {
         let version_data = fs::read_to_string(&version_file).await?;
         let version_json: VersionJson = serde_json::from_str(&version_data)?;
 
-        let required_java = self.get_required_java_version(version).await?;
-        let java_path = self.java_manager.find_java(Some(required_java))?;
+        let java_path = self.java_manager.find_java()?;
 
         let jar_version = version_json.inherits_from.as_deref().unwrap_or(version);
         let jar_dir = self.config.versions_dir.join(jar_version);
@@ -495,6 +402,11 @@ impl MinecraftLauncher {
         command
             .arg("-Xmx".to_string() + &ram_mb.to_string() + "M")
             .arg("-Xms".to_string() + &(ram_mb / 2).to_string() + "M")
+            .arg("-Dminecraft.launcher.brand=RCraft")
+            .arg(format!(
+                "-Dminecraft.launcher.version={}",
+                env!("CARGO_PKG_VERSION")
+            ))
             .arg("-Djava.library.path=".to_string() + &natives_dir.display().to_string())
             .arg("-cp")
             .arg(classpath)
@@ -539,24 +451,10 @@ impl MinecraftLauncher {
     {
         let mut version_to_launch = base_version.clone();
 
-        // 1. Check JAVA FIRST (Before Fabric)
-        // We need Java to install Fabric anyway, and we need to know if we have it to launch.
-        // We check against base_version first.
+        on_progress(0.1, "Finding Java...".into());
+        let java_p = self.java_manager.find_java()?;
 
-        on_progress(0.1, "Verifying Java...".into());
-        let required_java = self.get_required_java_version(&base_version).await?;
-
-        let java_p = match self.java_manager.find_java(Some(required_java)) {
-            Ok(p) => p,
-            Err(_) => {
-                return Err(anyhow!(
-                    "Java Runtime {} is missing. Please ensure it is installed.",
-                    required_java
-                ));
-            }
-        };
-
-        // 2. Handle Fabric
+        // Handle Fabric
         if is_fabric {
             on_progress(0.2, "Checking Fabric...".into());
             // Check if fabric version already exists for this base version
@@ -566,7 +464,6 @@ impl MinecraftLauncher {
                 version_to_launch = fabric_id;
             } else {
                 on_progress(0.3, "Installing Fabric...".into());
-                // Pass the java we found
                 match self
                     .install_fabric(&base_version, Some(java_p.clone()))
                     .await
@@ -640,7 +537,7 @@ impl MinecraftLauncher {
         let java_path = if let Some(p) = java_path_buf {
             p
         } else {
-            self.java_manager.find_java(None)?
+            self.java_manager.find_java()?
         };
 
         let mut command = TokioCommand::new(java_path);
