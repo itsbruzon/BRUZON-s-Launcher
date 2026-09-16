@@ -3,7 +3,6 @@ mod config;
 mod instances;
 mod java_manager;
 mod launcher;
-mod minecraft_rpc;
 mod library_manager;
 mod models;
 mod settings;
