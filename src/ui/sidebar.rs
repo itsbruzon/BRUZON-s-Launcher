@@ -5,7 +5,6 @@ use crate::ui::msg::AppMsg;
 use gtk::prelude::*;
 use relm4::ComponentSender;
 use relm4::gtk;
-
 use adw::NavigationPage;
 
 pub fn create_sidebar(
@@ -38,62 +37,54 @@ pub fn create_sidebar(
         .margin_end(12)
         .build();
 
-    let create_nav_button =
-        |label_text: &str, icon_name: &str| -> (gtk::Button, gtk::Label, gtk::Box) {
-            let button = gtk::Button::builder()
-                .halign(gtk::Align::Fill)
-                .hexpand(true)
-                .height_request(40)
-                .margin_top(6)
-                .margin_bottom(6)
-                .build();
-
-            let box_container = gtk::Box::builder()
-                .orientation(gtk::Orientation::Horizontal)
-                .spacing(12)
-                .halign(gtk::Align::Start)
-                .build();
-            let icon = gtk::Image::builder().icon_name(icon_name).build();
-            let label = gtk::Label::builder().label(label_text).visible(true).build();
-            box_container.append(&icon);
-            box_container.append(&label);
-            button.set_child(Some(&box_container));
-            (button, label, box_container)
-        };
+    let create_nav_button = |label_text: &str, icon_name: &str| -> (gtk::Button, gtk::Label, gtk::Box) {
+        let button = gtk::Button::builder()
+            .halign(gtk::Align::Fill)
+            .hexpand(true)
+            .height_request(40)
+            .margin_top(6)
+            .margin_bottom(6)
+            .build();
+        let box_container = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .halign(gtk::Align::Start)
+            .build();
+        let icon = gtk::Image::builder().icon_name(icon_name).build();
+        let label = gtk::Label::builder().label(label_text).visible(true).build();
+        box_container.append(&icon);
+        box_container.append(&label);
+        button.set_child(Some(&box_container));
+        (button, label, box_container)
+    };
 
     let (home_button, home_label, home_box) = create_nav_button("Home", "user-home-symbolic");
-    let (create_button, create_label, create_box) =
-        create_nav_button("New Profile", "list-add-symbolic");
-    let (settings_button, settings_label, settings_box) =
-        create_nav_button("Settings", "emblem-system-symbolic");
-    let (logs_button, logs_label, logs_box) =
-        create_nav_button("Logs", "utilities-terminal-symbolic");
+    let (create_button, create_label, create_box) = create_nav_button("New Instance", "list-add-symbolic");
+    let (settings_button, settings_label, settings_box) = create_nav_button("Settings", "emblem-system-symbolic");
+    let (logs_button, logs_label, logs_box) = create_nav_button("Logs", "utilities-terminal-symbolic");
     logs_button.set_visible(false);
 
-    let profiles_button = create_nav_button("Profiles", "avatar-default-symbolic").0;
-    profiles_button.set_tooltip_text(Some("Microsoft accounts"));
-    let profiles_sender = sender.clone();
-    profiles_button.connect_clicked(move |_| {
-        let _ = &profiles_sender;
+    let (accounts_button, accounts_label, accounts_box) = create_nav_button("Accounts", "avatar-default-symbolic");
+    accounts_button.set_tooltip_text(Some("Manage Microsoft and offline accounts"));
+    accounts_button.set_margin_top(6);
+    accounts_button.set_margin_bottom(6);
+    let accounts_sender = sender.clone();
+    accounts_button.connect_clicked(move |_| {
+        let _ = &accounts_sender;
         open_profiles_dialog(None);
     });
+    // Keep the account button visually consistent when the sidebar is collapsed.
+    accounts_label.set_visible(true);
+    accounts_box.set_halign(gtk::Align::Start);
 
     let sender_clone = sender.clone();
-    home_button.connect_clicked(move |_| {
-        sender_clone.input(AppMsg::NavigateToSection(Section::Home));
-    });
+    home_button.connect_clicked(move |_| sender_clone.input(AppMsg::NavigateToSection(Section::Home)));
     let sender_clone = sender.clone();
-    create_button.connect_clicked(move |_| {
-        sender_clone.input(AppMsg::NavigateToSection(Section::CreateInstance));
-    });
+    create_button.connect_clicked(move |_| sender_clone.input(AppMsg::NavigateToSection(Section::CreateInstance)));
     let sender_clone = sender.clone();
-    settings_button.connect_clicked(move |_| {
-        sender_clone.input(AppMsg::NavigateToSection(Section::Settings));
-    });
+    settings_button.connect_clicked(move |_| sender_clone.input(AppMsg::NavigateToSection(Section::Settings)));
     let sender_clone = sender.clone();
-    logs_button.connect_clicked(move |_| {
-        sender_clone.input(AppMsg::NavigateToSection(Section::Logs));
-    });
+    logs_button.connect_clicked(move |_| sender_clone.input(AppMsg::NavigateToSection(Section::Logs)));
 
     sidebar_content.append(&home_button);
     sidebar_content.append(&create_button);
@@ -103,10 +94,10 @@ pub fn create_sidebar(
     let spacer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     spacer.set_vexpand(true);
     sidebar_content.append(&spacer);
-    sidebar_content.append(&profiles_button);
+    sidebar_content.append(&accounts_button);
 
     let version_label = gtk::Label::builder()
-        .label("v1.1")
+        .label("v0.1-dev")
         .css_classes(vec!["dim-label".to_string(), "subtitle".to_string()])
         .margin_bottom(12)
         .build();
