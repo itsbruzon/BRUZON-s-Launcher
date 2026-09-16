@@ -17,6 +17,15 @@ pub struct MinecraftAccount {
     pub expires_at: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct DeviceCode {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    pub expires_in: u64,
+    pub interval: u64,
+}
+
 #[derive(Debug, Deserialize)]
 struct DeviceCodeResponse {
     device_code: String,
@@ -65,17 +74,8 @@ struct MinecraftProfile {
     name: String,
 }
 
-#[derive(Debug, Clone)]
-pub struct DeviceCode {
-    pub user_code: String,
-    pub verification_uri: String,
-    pub expires_in: u64,
-}
-
-pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> {
-    let client = Client::new();
-
-    let device = client
+pub async fn request_device_code() -> Result<DeviceCode> {
+    let response = Client::new()
         .post(DEVICE_CODE_URL)
         .form(&[
             ("client_id", PRISM_MSA_CLIENT_ID),
@@ -87,14 +87,19 @@ pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> 
         .json::<DeviceCodeResponse>()
         .await?;
 
-    let info = DeviceCode {
-        user_code: device.user_code.clone(),
-        verification_uri: device.verification_uri.clone(),
-        expires_in: device.expires_in,
-    };
+    Ok(DeviceCode {
+        device_code: response.device_code,
+        user_code: response.user_code,
+        verification_uri: response.verification_uri,
+        expires_in: response.expires_in,
+        interval: response.interval.unwrap_or(5).max(1),
+    })
+}
 
-    let interval = device.interval.unwrap_or(5).max(1);
+pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccount> {
+    let client = Client::new();
     let deadline = std::time::Instant::now() + Duration::from_secs(device.expires_in);
+    let mut interval = device.interval;
 
     let msa_token = loop {
         if std::time::Instant::now() >= deadline {
@@ -102,7 +107,7 @@ pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> 
         }
 
         sleep(Duration::from_secs(interval)).await;
-        let response = client
+        let token = client
             .post(TOKEN_URL)
             .form(&[
                 ("client_id", PRISM_MSA_CLIENT_ID),
@@ -110,15 +115,20 @@ pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> 
                 ("device_code", device.device_code.as_str()),
             ])
             .send()
+            .await?
+            .json::<TokenResponse>()
             .await?;
 
-        let token = response.json::<TokenResponse>().await?;
         if let Some(access_token) = token.access_token {
-            break (access_token, token.refresh_token, token.expires_in.unwrap_or(3600));
+            break (access_token, token.refresh_token);
         }
 
         match token.error.as_deref() {
-            Some("authorization_pending") | Some("slow_down") => continue,
+            Some("authorization_pending") => continue,
+            Some("slow_down") => {
+                interval += 5;
+                continue;
+            }
             Some(error) => {
                 return Err(anyhow!(
                     "Microsoft login failed: {}",
@@ -147,11 +157,7 @@ pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> 
         .json::<XboxResponse>()
         .await?;
 
-    let uhs = xbox
-        .display_claims
-        .xui
-        .first()
-        .map(|claim| claim.uhs.clone())
+    let uhs = xbox.display_claims.xui.first().map(|claim| claim.uhs.clone())
         .ok_or_else(|| anyhow!("Xbox Live did not return a user hash"))?;
 
     let xsts = client
@@ -159,10 +165,7 @@ pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> 
         .header("Content-Type", "application/json")
         .header("x-xbl-contract-version", "1")
         .json(&serde_json::json!({
-            "Properties": {
-                "SandboxId": "RETAIL",
-                "UserTokens": [xbox.token],
-            },
+            "Properties": { "SandboxId": "RETAIL", "UserTokens": [xbox.token] },
             "RelyingParty": "rp://api.minecraftservices.com/",
             "TokenType": "JWT"
         }))
@@ -193,46 +196,32 @@ pub async fn login_with_device_code() -> Result<(DeviceCode, MinecraftAccount)> 
         .json::<MinecraftProfile>()
         .await?;
 
-    let expires_at = now_unix() + minecraft.expires_in;
-    let account = MinecraftAccount {
+    Ok(MinecraftAccount {
         id: profile.id,
         name: profile.name,
         access_token: minecraft.access_token,
         refresh_token: msa_token.1,
-        expires_at,
-    };
-
-    Ok((info, account))
+        expires_at: now_unix() + minecraft.expires_in,
+    })
 }
 
 pub async fn save_accounts(path: &Path, accounts: &[MinecraftAccount]) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-    let data = serde_json::to_vec_pretty(accounts)?;
-    tokio::fs::write(path, data).await?;
-
+    if let Some(parent) = path.parent() { tokio::fs::create_dir_all(parent).await?; }
+    tokio::fs::write(path, serde_json::to_vec_pretty(accounts)?).await?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let permissions = std::fs::Permissions::from_mode(0o600);
-        tokio::fs::set_permissions(path, permissions).await?;
+        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
     }
-
     Ok(())
 }
 
 pub async fn load_accounts(path: &Path) -> Result<Vec<MinecraftAccount>> {
-    if !tokio::fs::try_exists(path).await.unwrap_or(false) {
-        return Ok(Vec::new());
-    }
-    let data = tokio::fs::read(path).await?;
-    Ok(serde_json::from_slice(&data).unwrap_or_default())
+    if !tokio::fs::try_exists(path).await.unwrap_or(false) { return Ok(Vec::new()); }
+    Ok(serde_json::from_slice(&tokio::fs::read(path).await?).unwrap_or_default())
 }
 
 pub fn now_unix() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs())
-        .unwrap_or(0)
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs()).unwrap_or(0)
 }
