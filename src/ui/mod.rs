@@ -743,6 +743,9 @@ impl SimpleComponent for AppModel {
                         widgets.content_stack.set_visible_child_name("home");
                         update_profile_list(&widgets.profile_list, &self.profiles, &self.sender);
                     }
+                    Section::Profiles => {
+                        widgets.content_stack.set_visible_child_name("profiles");
+                    }
                     Section::CreateInstance => {
                         widgets
                             .create_sidebar_button
