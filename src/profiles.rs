@@ -226,6 +226,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
             let add = Button::with_label("Add Account"); add.add_css_class("suggested-action"); box_root.append(&add);
             prompt.set_child(Some(&box_root));
             let accounts = accounts.clone(); let selected = selected.clone(); let status = status.clone(); let rebuild = rebuild.clone();
+            let prompt_for_add = prompt.clone();
             add.connect_clicked(move |_| {
                 let name = entry.text().trim().to_string();
                 if name.is_empty() { status.set_text("Enter an offline player name."); return; }
@@ -243,7 +244,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                     status.set_text("Offline account added and selected.");
                     rebuild();
                 });
-                prompt.close();
+                prompt_for_add.close();
             });
             prompt.present();
         });
