@@ -111,6 +111,11 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
         // worker thread.
         let device_handle = rt_network.spawn(async move { request_device_code().await });
 
+        // Clone the runtime for this GLib task instead of moving the
+        // callback's captured Arc<Runtime>. The GTK signal is an Fn closure
+        // and must remain reusable for subsequent clicks.
+        let rt_for_auth = rt_login.clone();
+
         glib::MainContext::default().spawn_local(async move {
             let device = match device_handle.await {
                 Ok(Ok(device)) => device,
@@ -144,7 +149,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
             accounts_box_ui.append(&open);
 
             // Again, only Send data is captured by the Tokio task.
-            let rt_auth = rt_login.clone();
+            let rt_auth = rt_for_auth.clone();
             let auth_handle = rt_auth.spawn(async move { complete_device_login(device).await });
             let path_save = path_result.clone();
 
