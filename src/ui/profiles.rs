@@ -172,8 +172,9 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
                     let selected_id = selected_for_remove.borrow().clone();
                     let status = status_for_remove.clone();
                     let rebuild = rebuild_for_remove.clone();
+                    let rt = rt_for_remove.clone();
                     glib::MainContext::default().spawn_local(async move {
-                        let result = rt_for_remove
+                        let result = rt
                             .spawn(async move {
                                 save_accounts(&accounts_path(), &remaining).await?;
                                 save_selected_account(&selected_account_path(), selected_id.as_deref()).await
@@ -281,6 +282,7 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
                 let saved = accounts.borrow().clone();
                 let status = status.clone();
                 let rebuild = rebuild.clone();
+                let rt = rt.clone();
                 glib::MainContext::default().spawn_local(async move {
                     let result = rt
                         .spawn(async move {
@@ -425,7 +427,6 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
 
     let scrolled = gtk::ScrolledWindow::new();
     scrolled.set_policy(gtk::PolicyType::Never, gtk::PolicyType::Automatic);
-    scrolled.set_vexpand(true);
     scrolled.set_child(Some(&root));
     scrolled
 }
