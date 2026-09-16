@@ -1,5 +1,4 @@
 use crate::models::Section;
-use crate::profiles::open_profiles_dialog;
 use crate::ui::model::AppModel;
 use crate::ui::msg::AppMsg;
 use adw::NavigationPage;
@@ -71,8 +70,7 @@ pub fn create_sidebar(
     profiles_button.set_tooltip_text(Some("Manage Microsoft and offline accounts"));
     let profiles_sender = sender.clone();
     profiles_button.connect_clicked(move |_| {
-        let _ = &profiles_sender;
-        open_profiles_dialog(None);
+        profiles_sender.input(AppMsg::NavigateToSection(Section::Profiles));
     });
     profiles_label.set_visible(true);
     profiles_box.set_halign(gtk::Align::Start);
