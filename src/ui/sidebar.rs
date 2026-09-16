@@ -18,6 +18,8 @@ pub fn create_sidebar(
     gtk::Label,
     gtk::Label,
     gtk::Label,
+    gtk::Label,
+    gtk::Box,
     gtk::Box,
     gtk::Box,
     gtk::Box,
@@ -119,9 +121,11 @@ pub fn create_sidebar(
         create_label,
         settings_label,
         logs_label,
+        profiles_label,
         home_box,
         create_box,
         settings_box,
         logs_box,
+        profiles_box,
     )
 }
