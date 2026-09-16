@@ -5,6 +5,7 @@ use adw::NavigationPage;
 use adw::prelude::*;
 use relm4::ComponentSender;
 use relm4::gtk;
+use gtk4::glib;
 
 pub fn create_sidebar(
     sender: &ComponentSender<AppModel>,
@@ -74,8 +75,8 @@ pub fn create_sidebar(
     });
 
     // Keep every sidebar label in sync with the actual sidebar width, including
-    // the Profiles button at the bottom. The idle pass handles the initial
-    // allocation because width_notify is not guaranteed to fire on startup.
+    // the Profiles button at the bottom. GTK's Box does not expose a width-notify
+    // signal, so observe the allocation instead through a size-allocate callback.
     let labels = [
         home_label.clone(),
         create_label.clone(),
@@ -90,7 +91,8 @@ pub fn create_sidebar(
         logs_box.clone(),
         profiles_box.clone(),
     ];
-    let sync_sidebar = move |width: i32| {
+
+    let update_sidebar_layout = move |width: i32| {
         let collapsed = width <= 100;
         for label in &labels {
             label.set_visible(!collapsed);
@@ -104,14 +106,20 @@ pub fn create_sidebar(
         }
     };
 
-    let sync_on_resize = sync_sidebar.clone();
-    sidebar_content.connect_width_notify(move |sidebar| {
-        sync_on_resize(sidebar.width());
+    // GTK4 does not provide connect_width_notify on GtkBox. The sidebar is
+    // allocated by the NavigationSplitView, so update after allocation and
+    // whenever GTK processes a new frame.
+    let update_for_idle = update_sidebar_layout.clone();
+    let sidebar_for_idle = sidebar_content.clone();
+    glib::idle_add_local_once(move || {
+        update_for_idle(sidebar_for_idle.width());
     });
 
-    let sync_initial = sync_sidebar.clone();
-    glib::idle_add_local_once(move || {
-        sync_initial(sidebar_content.width());
+    let update_for_resize = update_sidebar_layout.clone();
+    let sidebar_for_resize = sidebar_content.clone();
+    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+        update_for_resize(sidebar_for_resize.width());
+        glib::ControlFlow::Continue
     });
 
     let sender_clone = sender.clone();
