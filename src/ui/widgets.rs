@@ -43,12 +43,14 @@ pub struct AppWidgets {
     pub create_label: gtk::Label,
     pub settings_label: gtk::Label,
     pub logs_label: gtk::Label,
+    pub profiles_label: gtk::Label,
 
     // Sidebar button boxes (for alignment)
     pub home_box: gtk::Box,
     pub create_box: gtk::Box,
     pub settings_box: gtk::Box,
     pub logs_box: gtk::Box,
+    pub profiles_box: gtk::Box,
 
     // Sidebar Toggle
     pub sidebar_toggle_button: gtk::Button,
