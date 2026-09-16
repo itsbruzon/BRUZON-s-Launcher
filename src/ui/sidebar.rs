@@ -18,8 +18,6 @@ pub fn create_sidebar(
     gtk::Label,
     gtk::Label,
     gtk::Label,
-    gtk::Label,
-    gtk::Box,
     gtk::Box,
     gtk::Box,
     gtk::Box,
@@ -74,8 +72,36 @@ pub fn create_sidebar(
     profiles_button.connect_clicked(move |_| {
         profiles_sender.input(AppMsg::NavigateToSection(Section::Profiles));
     });
-    profiles_label.set_visible(true);
-    profiles_box.set_halign(gtk::Align::Start);
+
+    // Keep every sidebar label in sync with the actual sidebar width. This also
+    // covers Profiles, which is positioned separately at the bottom of the sidebar.
+    let labels = [
+        home_label.clone(),
+        create_label.clone(),
+        settings_label.clone(),
+        logs_label.clone(),
+        profiles_label.clone(),
+    ];
+    let boxes = [
+        home_box.clone(),
+        create_box.clone(),
+        settings_box.clone(),
+        logs_box.clone(),
+        profiles_box.clone(),
+    ];
+    sidebar_content.connect_width_notify(move |sidebar| {
+        let collapsed = sidebar.width() <= 100;
+        for label in &labels {
+            label.set_visible(!collapsed);
+        }
+        for box_container in &boxes {
+            box_container.set_halign(if collapsed {
+                gtk::Align::Center
+            } else {
+                gtk::Align::Start
+            });
+        }
+    });
 
     let sender_clone = sender.clone();
     home_button.connect_clicked(move |_| sender_clone.input(AppMsg::NavigateToSection(Section::Home)));
@@ -121,11 +147,9 @@ pub fn create_sidebar(
         create_label,
         settings_label,
         logs_label,
-        profiles_label,
         home_box,
         create_box,
         settings_box,
         logs_box,
-        profiles_box,
     )
 }
