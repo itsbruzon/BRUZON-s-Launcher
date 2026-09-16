@@ -1,0 +1,65 @@
+name: cleanup-custom-rpc
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message != 'Remove custom Discord RPC completely'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Remove RPC integration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/ui/mod.rs')
+          text = path.read_text()
+
+          text = text.replace('use crate::minecraft_rpc::{MinecraftRpc, RpcPresence};\n', '')
+          text = text.replace('            discord_rpc: MinecraftRpc::start(),\n', '')
+          text = re.sub(r'\n        let discord_presence_switch =\n            adw::SwitchRow::builder\(\).title\("Discord Rich Presence"\).build\(\);\n', '\n', text)
+          text = text.replace('        let (settings_page, theme_combo) = create_settings_page(\n            &sender,\n            &hide_logs_switch,\n            &discord_presence_switch,\n        );', '        let (settings_page, theme_combo) = create_settings_page(&sender, &hide_logs_switch);')
+          text = text.replace('            discord_presence_switch,\n', '')
+          text = text.replace('                self.apply_discord_presence(RpcPresence::InLauncher);\n', '')
+          text = re.sub(r'            AppMsg::ToggleDiscordPresence\(enabled\) => \{.*?\n            \}\n', '', text, flags=re.S)
+          text = re.sub(r'\s*self\.apply_discord_presence\(RpcPresence::Launching \{\n\s*version: profile_clone\.version\.clone\(\),\n\s*\}\);\n', '\n', text)
+          text = text.replace('                self.apply_discord_presence(RpcPresence::Clear);\n', '')
+          text = text.replace('                self.apply_discord_presence(RpcPresence::InLauncher);\n', '')
+          text = re.sub(r'\nimpl AppModel \{\n    fn apply_discord_presence\(.*?\n    \}\n\n    fn save_settings', '\nimpl AppModel {\n    fn save_settings', text, flags=re.S)
+          text = re.sub(r'\n        widgets\n            \.discord_presence_switch\n            \.set_active\(self\.settings\.discord_presence\);\n', '\n', text)
+
+          if 'discord_rpc' in text or 'discord_presence' in text or 'RpcPresence' in text or 'MinecraftRpc' in text:
+              raise SystemExit('RPC references remain in src/ui/mod.rs')
+
+          path.write_text(text)
+          PY
+
+          rm -f src/minecraft_rpc.rs
+          cargo generate-lockfile
+
+      - name: Verify no custom RPC remains
+        run: |
+          ! grep -RniE 'discordipc|MinecraftRpc|RpcPresence|discord_presence|minecraft_rpc' Cargo.toml src --exclude-dir=target
+
+      - name: Commit cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Remove custom Discord RPC completely' || exit 0
+          git push
+
+      - name: Remove temporary workflow
+        if: always()
+        run: |
+          git rm -f .github/workflows/cleanup-rpc.yml || true
+          git commit -m 'Remove temporary RPC cleanup workflow' || true
+          git push || true
