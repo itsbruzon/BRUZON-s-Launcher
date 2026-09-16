@@ -9,12 +9,29 @@ const PRISM_MSA_CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
 const DEVICE_CODE_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
 const TOKEN_URL: &str = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AccountType {
+    Microsoft,
+    Offline,
+}
+
+impl Default for AccountType {
+    fn default() -> Self {
+        AccountType::Microsoft
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MinecraftAccount {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub account_type: AccountType,
+    #[serde(default)]
     pub access_token: String,
+    #[serde(default)]
     pub refresh_token: Option<String>,
+    #[serde(default)]
     pub expires_at: u64,
     #[serde(default)]
     pub skin_url: Option<String>,
@@ -101,6 +118,19 @@ fn now_unix() -> u64 {
         .as_secs()
 }
 
+pub fn offline_account(name: String) -> MinecraftAccount {
+    let normalized = name.trim().to_string();
+    MinecraftAccount {
+        id: format!("offline-{}", normalized),
+        name: normalized,
+        account_type: AccountType::Offline,
+        access_token: String::new(),
+        refresh_token: None,
+        expires_at: 0,
+        skin_url: None,
+    }
+}
+
 pub async fn request_device_code() -> Result<DeviceCode> {
     let client = Client::new();
     let response = client
@@ -155,9 +185,7 @@ async fn poll_microsoft_token(device: &DeviceCode) -> Result<TokenResponse> {
         }
 
         match token.error.as_deref() {
-            Some("authorization_pending") => {
-                sleep(Duration::from_secs(interval)).await;
-            }
+            Some("authorization_pending") => sleep(Duration::from_secs(interval)).await,
             Some("slow_down") => {
                 interval = interval.saturating_add(5);
                 sleep(Duration::from_secs(interval)).await;
@@ -165,15 +193,10 @@ async fn poll_microsoft_token(device: &DeviceCode) -> Result<TokenResponse> {
             Some(error) => {
                 return Err(anyhow!(
                     "Microsoft sign-in failed: {}",
-                    token
-                        .error_description
-                        .as_deref()
-                        .unwrap_or(error)
+                    token.error_description.as_deref().unwrap_or(error)
                 ));
             }
-            None => {
-                return Err(anyhow!("Microsoft sign-in failed: HTTP {}", status));
-            }
+            None => return Err(anyhow!("Microsoft sign-in failed: HTTP {}", status)),
         }
     }
 }
@@ -240,23 +263,27 @@ pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccoun
         .json::<MinecraftLoginResponse>()
         .await?;
 
-    let entitlements = client
+    let entitlements_response = client
         .get("https://api.minecraftservices.com/entitlements/mcstore")
         .bearer_auth(&minecraft.access_token)
         .send()
-        .await?
-        .error_for_status()?
-        .json::<MinecraftEntitlements>()
         .await?;
+    let entitlements = entitlements_response.error_for_status()?.json::<MinecraftEntitlements>().await?;
 
-    let owns_minecraft = entitlements
-        .items
-        .iter()
-        .any(|item| item.name == "product_minecraft" || item.name == "game_minecraft");
+    let owns_minecraft = entitlements.items.iter().any(|item| {
+        matches!(item.name.as_str(), "product_minecraft" | "game_minecraft")
+    });
 
     if !owns_minecraft {
+        let items = entitlements
+            .items
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
         return Err(anyhow!(
-            "This Microsoft account does not have a Minecraft Java Edition entitlement."
+            "Minecraft entitlement check returned no Java entitlement (items: {}).",
+            if items.is_empty() { "none" } else { &items }
         ));
     }
 
@@ -272,11 +299,15 @@ pub async fn complete_device_login(device: DeviceCode) -> Result<MinecraftAccoun
         ));
     }
 
-    let profile = profile_response.error_for_status()?.json::<MinecraftProfile>().await?;
+    let profile = profile_response
+        .error_for_status()?
+        .json::<MinecraftProfile>()
+        .await?;
 
     Ok(MinecraftAccount {
         id: profile.id.clone(),
         name: profile.name,
+        account_type: AccountType::Microsoft,
         access_token: minecraft.access_token,
         refresh_token: microsoft.refresh_token,
         expires_at: now_unix().saturating_add(minecraft.expires_in.unwrap_or(3600)),
@@ -288,7 +319,6 @@ pub async fn save_accounts(path: &Path, accounts: &[MinecraftAccount]) -> Result
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).await?;
     }
-
     let data = serde_json::to_vec_pretty(accounts)?;
     fs::write(path, data).await?;
 
@@ -297,7 +327,6 @@ pub async fn save_accounts(path: &Path, accounts: &[MinecraftAccount]) -> Result
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
     }
-
     Ok(())
 }
 
@@ -305,7 +334,34 @@ pub async fn load_accounts(path: &Path) -> Result<Vec<MinecraftAccount>> {
     if !path.exists() {
         return Ok(Vec::new());
     }
-
     let data = fs::read(path).await?;
     Ok(serde_json::from_slice(&data)?)
+}
+
+pub async fn save_selected_account(path: &Path, account_id: Option<&str>) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).await?;
+    }
+    match account_id {
+        Some(id) => fs::write(path, id).await?,
+        None => {
+            if path.exists() {
+                fs::remove_file(path).await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub async fn load_selected_account(path: &Path) -> Result<Option<String>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let id = fs::read_to_string(path).await?;
+    let id = id.trim();
+    if id.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(id.to_string()))
+    }
 }
