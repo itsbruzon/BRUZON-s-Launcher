@@ -23,7 +23,6 @@ pub struct AppWidgets {
     pub ram_scale: adw::SpinRow,
     pub fabric_switch: adw::SwitchRow,
     pub hide_logs_switch: adw::SwitchRow,
-    pub discord_presence_switch: adw::SwitchRow,
 
     // Buttons
     pub launch_button: gtk::Button,
