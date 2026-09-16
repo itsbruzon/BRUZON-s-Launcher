@@ -290,6 +290,14 @@ impl MinecraftLauncher {
         }
     }
 
+    fn required_java_version(version_json: &VersionJson) -> u32 {
+        version_json
+            .java_version
+            .as_ref()
+            .map(|java| java.major_version)
+            .unwrap_or(21)
+    }
+
     pub async fn launch_minecraft(
         &self,
         version: &str,
@@ -330,7 +338,11 @@ impl MinecraftLauncher {
         let version_data = fs::read_to_string(&version_file).await?;
         let version_json: VersionJson = serde_json::from_str(&version_data)?;
 
-        let java_path = self.java_manager.find_java()?;
+        let required_java = Self::required_java_version(&version_json);
+        let java_path = self
+            .java_manager
+            .find_or_install_java(required_java, |_, _| {})
+            .await?;
 
         let jar_version = version_json.inherits_from.as_deref().unwrap_or(version);
         let jar_dir = self.config.versions_dir.join(jar_version);
@@ -464,11 +476,29 @@ impl MinecraftLauncher {
     {
         let mut version_to_launch = base_version.clone();
 
-        on_progress(0.1, "Finding Java...".into());
-        let java_p = self.java_manager.find_java()?;
+        self.ensure_version_ready(&base_version).await?;
+        let base_version_file = self
+            .config
+            .versions_dir
+            .join(&base_version)
+            .join(format!("{}.json", base_version));
+        let base_version_data = fs::read_to_string(&base_version_file).await?;
+        let base_version_json: VersionJson = serde_json::from_str(&base_version_data)?;
+        let required_java = Self::required_java_version(&base_version_json);
+
+        on_progress(0.1, format!("Finding Java {}...", required_java));
+        let java_p = self
+            .java_manager
+            .find_or_install_java(required_java, {
+                let on_progress = on_progress.clone();
+                move |progress, message| {
+                    on_progress(0.1 + progress * 0.15, message);
+                }
+            })
+            .await?;
 
         if is_fabric {
-            on_progress(0.2, "Checking Fabric...".into());
+            on_progress(0.25, "Checking Fabric...".into());
             let fabric_installed = self.find_installed_fabric_version(&base_version).await;
 
             if let Some(fabric_id) = fabric_installed {
@@ -536,57 +566,3 @@ impl MinecraftLauncher {
             let mut out = tokio::fs::File::create(&installer_path).await?;
             out.write_all(&bytes).await?;
         }
-
-        let java_path = if let Some(p) = java_path_buf {
-            p
-        } else {
-            self.java_manager.find_java()?
-        };
-
-        let mut command = TokioCommand::new(java_path);
-        command
-            .arg("-jar")
-            .arg(&installer_path)
-            .arg("client")
-            .arg("-dir")
-            .arg(&self.config.minecraft_dir)
-            .arg("-mcversion")
-            .arg(mc_version)
-            .arg("-noprofile")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        let output = command.output().await?;
-
-        if !output.status.success() {
-            let err = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow!("Fabric installation failed: {}", err));
-        }
-
-        let versions_dir = self.config.versions_dir.clone();
-        let mut best_match: Option<String> = None;
-        let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
-
-        let mut read_dir = tokio::fs::read_dir(&versions_dir).await?;
-        while let Some(entry) = read_dir.next_entry().await? {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name.contains("fabric-loader") && name.ends_with(&format!("-{}", mc_version))
-                    {
-                        if let Ok(metadata) = entry.metadata().await {
-                            if let Ok(modified) = metadata.modified() {
-                                if modified > latest_time {
-                                    latest_time = modified;
-                                    best_match = Some(name.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        best_match.ok_or_else(|| anyhow!("Could not find installed Fabric version directory"))
-    }
-}
