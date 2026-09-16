@@ -5,6 +5,7 @@ use std::process::Stdio;
 use tokio::fs;
 use tokio::process::Command as TokioCommand;
 
+use crate::auth::{accounts_path, load_accounts, load_selected_account, selected_account_path, AccountType};
 use crate::config::LauncherConfig;
 use crate::java_manager::JavaManager;
 use crate::library_manager::LibraryManager;
@@ -292,10 +293,35 @@ impl MinecraftLauncher {
     pub async fn launch_minecraft(
         &self,
         version: &str,
-        username: &str,
+        _username: &str,
         ram_mb: u32,
         game_dir: &Path,
     ) -> Result<TokioCommand> {
+        let selected_id = load_selected_account(&selected_account_path())
+            .await?
+            .ok_or_else(|| anyhow!("No account is selected. Please select an account before launching."))?;
+        let accounts = load_accounts(&accounts_path()).await?;
+        let account = accounts
+            .iter()
+            .find(|account| account.id == selected_id)
+            .ok_or_else(|| anyhow!("The selected account could not be found. Please select an account again."))?;
+
+        let launch_username = account.name.clone();
+        let launch_access_token = match account.account_type {
+            AccountType::Microsoft => {
+                if account.access_token.trim().is_empty() {
+                    return Err(anyhow!("The selected Microsoft account has no Minecraft access token. Please sign in again."));
+                }
+                account.access_token.clone()
+            }
+            AccountType::Offline => "0".to_string(),
+        };
+        let launch_uuid = if account.account_type == AccountType::Microsoft {
+            Some(account.id.clone())
+        } else {
+            None
+        };
+
         self.ensure_version_ready(version).await?;
 
         let version_dir = self.config.versions_dir.join(version);
@@ -396,7 +422,7 @@ impl MinecraftLauncher {
             .arg(classpath)
             .arg(main_class)
             .arg("--username")
-            .arg(username)
+            .arg(&launch_username)
             .arg("--version")
             .arg(version)
             .arg("--gameDir")
@@ -408,9 +434,13 @@ impl MinecraftLauncher {
             command.arg("--assetIndex").arg(id);
         }
 
+        if let Some(uuid) = launch_uuid {
+            command.arg("--uuid").arg(uuid);
+        }
+
         command
             .arg("--accessToken")
-            .arg("0")
+            .arg(launch_access_token)
             .arg("--userProperties")
             .arg("{}")
             .current_dir(&version_dir)
