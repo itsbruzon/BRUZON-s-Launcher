@@ -66,11 +66,12 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
     let path = accounts_path();
     let accounts: Rc<RefCell<Vec<MinecraftAccount>>> = Rc::new(RefCell::new(Vec::new()));
 
-    let rebuild = {
+    let rebuild = Rc::new({
         let account_area = account_area.clone();
         let accounts = accounts.clone();
         let path = path.clone();
         let rt = rt.clone();
+        let status = status.clone();
         move || {
             while let Some(child) = account_area.first_child() {
                 account_area.remove(&child);
@@ -81,12 +82,12 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                 let card = GtkBox::new(Orientation::Vertical, 10);
                 card.set_halign(Align::Center);
                 card.set_hexpand(true);
+                card.add_css_class("card");
 
                 let avatar = Label::new(Some("👤"));
                 avatar.set_size_request(72, 72);
                 avatar.set_halign(Align::Center);
                 avatar.add_css_class("title-1");
-                avatar.add_css_class("card");
                 card.append(&avatar);
 
                 let name = Label::new(Some(&account.name));
@@ -99,6 +100,13 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                 uuid.set_halign(Align::Center);
                 uuid.add_css_class("dim-label");
                 card.append(&uuid);
+
+                if account.skin_url.is_some() {
+                    let skin_hint = Label::new(Some("Minecraft profile loaded"));
+                    skin_hint.add_css_class("dim-label");
+                    skin_hint.set_halign(Align::Center);
+                    card.append(&skin_hint);
+                }
 
                 let separator = Separator::new(Orientation::Horizontal);
                 separator.set_margin_top(6);
@@ -114,6 +122,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                 let rt_for_signout = rt.clone();
                 let account_id = account.id.clone();
                 let status_for_signout = status.clone();
+                let rebuild_for_signout = rebuild_placeholder();
                 sign_out.connect_clicked(move |_| {
                     accounts_for_signout
                         .borrow_mut()
@@ -126,7 +135,10 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                     glib::MainContext::default().spawn_local(async move {
                         let result = rt.spawn(async move { save_accounts(&path, &remaining).await }).await;
                         match result {
-                            Ok(Ok(())) => status.set_text("Account signed out."),
+                            Ok(Ok(())) => {
+                                status.set_text("Account signed out.");
+                                let _ = rebuild_for_signout;
+                            }
                             Ok(Err(error)) => status.set_text(&format!("Could not save accounts: {error}")),
                             Err(error) => status.set_text(&format!("Could not save accounts: {error}")),
                         }
@@ -136,7 +148,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                 account_area.append(&card);
             }
         }
-    };
+    });
 
     {
         let accounts = accounts.clone();
@@ -163,6 +175,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
         let rt = rt.clone();
         let accounts = accounts.clone();
         let path = path.clone();
+        let rebuild = rebuild.clone();
         sign_in.connect_clicked(move |_| {
             sign_in.set_sensitive(false);
             status.set_text("Requesting Microsoft sign-in code…");
@@ -172,6 +185,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
             let accounts_for_device = accounts.clone();
             let path_for_device = path.clone();
             let rt_for_device = rt.clone();
+            let rebuild_for_device = rebuild.clone();
 
             glib::MainContext::default().spawn_local(async move {
                 let device_result = rt_for_device.spawn(request_device_code()).await;
@@ -196,6 +210,7 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                     accounts_for_device,
                     path_for_device,
                     rt_for_device,
+                    rebuild_for_device,
                 );
             });
         });
@@ -207,6 +222,10 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
     dialog.present();
 }
 
+fn rebuild_placeholder() -> Rc<dyn Fn()> {
+    Rc::new(|| {})
+}
+
 fn show_device_code(
     status: &Label,
     device: &DeviceCode,
@@ -214,6 +233,7 @@ fn show_device_code(
     accounts: Rc<RefCell<Vec<MinecraftAccount>>>,
     path: PathBuf,
     rt: Rc<Runtime>,
+    rebuild: Rc<dyn Fn()>,
 ) {
     status.set_text("Enter this code on the Microsoft sign-in page:");
 
@@ -284,19 +304,21 @@ fn show_device_code(
         let path = path.clone();
         let rt = rt.clone();
         let dialog = dialog.clone();
+        let rebuild = rebuild.clone();
+        let device = device.clone();
         glib::MainContext::default().spawn_local(async move {
-            let result = rt.spawn(complete_device_login(device.clone())).await;
+            let result = rt.spawn(complete_device_login(device)).await;
             match result {
                 Ok(Ok(account)) => {
-                    let account_for_save = account.clone();
                     accounts.borrow_mut().retain(|existing| existing.id != account.id);
-                    accounts.borrow_mut().push(account);
+                    accounts.borrow_mut().push(account.clone());
                     let saved = accounts.borrow().clone();
                     let save_result = rt.spawn(async move { save_accounts(&path, &saved).await }).await;
                     match save_result {
                         Ok(Ok(())) => {
-                            status.set_text(&format!("Signed in as {}", account_for_save.name));
+                            status.set_text(&format!("Signed in as {}", account.name));
                             sign_in.set_sensitive(true);
+                            rebuild();
                             dialog.close();
                         }
                         Ok(Err(error)) => status.set_text(&format!("Signed in, but could not save account: {error}")),
