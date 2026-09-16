@@ -1,11 +1,11 @@
 [package]
-name = "RCraft"
+name = "BLauncher"
 version = "1.1.0"
 edition = "2024"
-description = "Minecraft Launcher for Linux"
+description = "BRUZON's Launcher - A Modern, Lightweight Minecraft Launcher for Linux"
 license = "GPL-3.0"
-authors = ["vdkvdev"]
-default-run = "RCraft"
+authors = ["BRUZON"]
+default-run = "BLauncher"
 
 [dependencies]
 tokio = { version = "1.0", features = ["rt-multi-thread", "fs", "macros", "process"] }
