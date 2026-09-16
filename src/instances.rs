@@ -1,3 +1,8 @@
+#![allow(dead_code)]
+// This domain module is intentionally ahead of the current launch path. The
+// instance persistence and launch integration will consume this API in the
+// next backend refactor; keep it compiled and tested in the meantime.
+
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
