@@ -1,9 +1,9 @@
-use crate::auth::{complete_device_login, load_accounts, request_device_code, save_accounts};
-use gtk4::glib;
+use crate::auth::{complete_device_login, load_accounts, request_device_code, save_accounts, DeviceCode, MinecraftAccount};
 use gtk4::prelude::*;
-use gtk4::{Align, Box as GtkBox, Button, Dialog, Label, Orientation};
+use gtk4::{Align, Box as GtkBox, Button, Entry, Label, Orientation, Separator};
+use std::cell::RefCell;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 use tokio::runtime::Runtime;
 
 fn accounts_path() -> PathBuf {
@@ -14,180 +14,308 @@ fn accounts_path() -> PathBuf {
 }
 
 pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
-    let dialog = Dialog::builder()
-        .title("Profiles")
+    let dialog = gtk4::Window::builder()
+        .title("Microsoft Accounts")
+        .default_width(430)
+        .default_height(520)
         .modal(true)
-        .default_width(460)
-        .default_height(360)
         .build();
+
     if let Some(parent) = parent {
         dialog.set_transient_for(Some(parent));
     }
 
-    let content = GtkBox::builder()
-        .orientation(Orientation::Vertical)
-        .spacing(12)
-        .margin_top(18)
-        .margin_bottom(18)
-        .margin_start(18)
-        .margin_end(18)
-        .build();
-    let title = Label::builder()
-        .label("Minecraft Accounts")
-        .halign(Align::Start)
-        .build();
+    let root = GtkBox::new(Orientation::Vertical, 18);
+    root.set_margin_top(24);
+    root.set_margin_bottom(24);
+    root.set_margin_start(24);
+    root.set_margin_end(24);
+
+    let title = Label::new(Some("Accounts"));
     title.add_css_class("title-2");
-    let status = Label::builder()
-        .label("Sign in with your Microsoft account to use Minecraft Java Edition.")
-        .wrap(true)
-        .halign(Align::Start)
-        .build();
-    status.add_css_class("dim-label");
-    let accounts_box = GtkBox::new(Orientation::Vertical, 8);
-    let login_button = Button::builder()
-        .label("Sign in with Microsoft")
-        .halign(Align::Fill)
-        .build();
-    login_button.add_css_class("suggested-action");
-    let close_button = Button::with_label("Close");
+    root.append(&title);
 
-    content.append(&title);
-    content.append(&status);
-    content.append(&accounts_box);
-    content.append(&login_button);
-    content.append(&close_button);
-    dialog.content_area().append(&content);
+    let account_area = GtkBox::new(Orientation::Vertical, 12);
+    account_area.set_vexpand(true);
+    account_area.set_valign(Align::Start);
+    root.append(&account_area);
 
-    // Tokio is used only for async filesystem/network work. GTK objects are
-    // strictly kept on the GLib main thread because they are !Send/!Sync.
-    let rt = Arc::new(Runtime::new().expect("tokio runtime"));
+    let status = Label::new(None);
+    status.set_wrap(true);
+    status.set_selectable(true);
+    root.append(&status);
 
-    let path_initial = accounts_path();
-    let accounts_box_initial = accounts_box.clone();
-    let rt_initial = rt.clone();
-    let initial_handle = rt_initial.spawn(async move {
-        let accounts = load_accounts(&path_initial).await.unwrap_or_default();
-        accounts.into_iter().map(|a| a.name).collect::<Vec<_>>()
-    });
+    let sign_in = Button::with_label("Sign in with Microsoft");
+    sign_in.add_css_class("suggested-action");
+    root.append(&sign_in);
 
-    glib::MainContext::default().spawn_local(async move {
-        let names = initial_handle.await.unwrap_or_default();
-        while let Some(child) = accounts_box_initial.first_child() {
-            accounts_box_initial.remove(&child);
+    let close = Button::with_label("Close");
+    root.append(&close);
+
+    dialog.set_child(Some(&root));
+
+    let rt = match Runtime::new() {
+        Ok(rt) => Rc::new(rt),
+        Err(error) => {
+            status.set_text(&format!("Could not start authentication runtime: {error}"));
+            dialog.present();
+            return;
         }
-        if names.is_empty() {
-            accounts_box_initial.append(&Label::new(Some(
-                "No Microsoft accounts added yet.",
-            )));
-        } else {
-            for name in names {
-                accounts_box_initial.append(
-                    &Label::builder()
-                        .label(&format!("✓  {}", name))
-                        .halign(Align::Start)
-                        .build(),
-                );
+    };
+
+    let path = accounts_path();
+    let accounts: Rc<RefCell<Vec<MinecraftAccount>>> = Rc::new(RefCell::new(Vec::new()));
+
+    let rebuild = {
+        let account_area = account_area.clone();
+        let accounts = accounts.clone();
+        let path = path.clone();
+        let rt = rt.clone();
+        move || {
+            while let Some(child) = account_area.first_child() {
+                account_area.remove(&child);
+            }
+
+            let current = accounts.borrow().clone();
+            for account in current {
+                let card = GtkBox::new(Orientation::Vertical, 10);
+                card.set_halign(Align::Center);
+                card.set_hexpand(true);
+
+                let avatar = Label::new(Some("👤"));
+                avatar.set_size_request(72, 72);
+                avatar.set_halign(Align::Center);
+                avatar.add_css_class("title-1");
+                avatar.add_css_class("card");
+                card.append(&avatar);
+
+                let name = Label::new(Some(&account.name));
+                name.add_css_class("title-2");
+                name.set_halign(Align::Center);
+                card.append(&name);
+
+                let uuid = Label::new(Some(&format!("UUID: {}", account.id)));
+                uuid.set_selectable(true);
+                uuid.set_halign(Align::Center);
+                uuid.add_css_class("dim-label");
+                card.append(&uuid);
+
+                let separator = Separator::new(Orientation::Horizontal);
+                separator.set_margin_top(6);
+                separator.set_margin_bottom(6);
+                card.append(&separator);
+
+                let sign_out = Button::with_label("Sign Out");
+                sign_out.add_css_class("destructive-action");
+                sign_out.set_halign(Align::Center);
+
+                let accounts_for_signout = accounts.clone();
+                let path_for_signout = path.clone();
+                let rt_for_signout = rt.clone();
+                let account_id = account.id.clone();
+                let status_for_signout = status.clone();
+                sign_out.connect_clicked(move |_| {
+                    accounts_for_signout
+                        .borrow_mut()
+                        .retain(|saved| saved.id != account_id);
+
+                    let remaining = accounts_for_signout.borrow().clone();
+                    let path = path_for_signout.clone();
+                    let status = status_for_signout.clone();
+                    let rt = rt_for_signout.clone();
+                    glib::MainContext::default().spawn_local(async move {
+                        let result = rt.spawn(async move { save_accounts(&path, &remaining).await }).await;
+                        match result {
+                            Ok(Ok(())) => status.set_text("Account signed out."),
+                            Ok(Err(error)) => status.set_text(&format!("Could not save accounts: {error}")),
+                            Err(error) => status.set_text(&format!("Could not save accounts: {error}")),
+                        }
+                    });
+                });
+                card.append(&sign_out);
+                account_area.append(&card);
             }
         }
-    });
+    };
 
-    let path_login = accounts_path();
-    let status_click = status.clone();
-    let login_click = login_button.clone();
-    let accounts_box_click = accounts_box.clone();
-    let rt_login = rt.clone();
-
-    login_button.connect_clicked(move |_| {
-        login_click.set_sensitive(false);
-        status_click.set_label("Requesting a Microsoft sign-in code…");
-
-        let status_ui = status_click.clone();
-        let button_ui = login_click.clone();
-        let accounts_box_ui = accounts_box_click.clone();
-        let path_result = path_login.clone();
-        let rt_network = rt_login.clone();
-
-        // This task captures no GTK objects, so Tokio can safely move it to a
-        // worker thread.
-        let device_handle = rt_network.spawn(async move { request_device_code().await });
-
-        // Clone the runtime for this GLib task instead of moving the
-        // callback's captured Arc<Runtime>. The GTK signal is an Fn closure
-        // and must remain reusable for subsequent clicks.
-        let rt_for_auth = rt_login.clone();
-
+    {
+        let accounts = accounts.clone();
+        let path = path.clone();
+        let status = status.clone();
+        let rebuild = rebuild.clone();
+        let rt = rt.clone();
         glib::MainContext::default().spawn_local(async move {
-            let device = match device_handle.await {
-                Ok(Ok(device)) => device,
-                Ok(Err(error)) => {
-                    status_ui.set_label(&format!(
-                        "Could not start Microsoft login: {}",
-                        error
-                    ));
-                    button_ui.set_sensitive(true);
-                    return;
+            let loaded = rt.spawn(async move { load_accounts(&path).await }).await;
+            match loaded {
+                Ok(Ok(saved)) => {
+                    *accounts.borrow_mut() = saved;
+                    rebuild();
                 }
-                Err(error) => {
-                    status_ui.set_label(&format!(
-                        "Microsoft login task failed: {}",
-                        error
-                    ));
-                    button_ui.set_sensitive(true);
-                    return;
-                }
-            };
+                Ok(Err(error)) => status.set_text(&format!("Could not load accounts: {error}")),
+                Err(error) => status.set_text(&format!("Could not load accounts: {error}")),
+            }
+        });
+    }
 
-            let code = device.user_code.clone();
-            let url = device.verification_uri.clone();
-            status_ui.set_label(&format!("Open {} and enter code {}.", url, code));
+    {
+        let status = status.clone();
+        let sign_in = sign_in.clone();
+        let rt = rt.clone();
+        let accounts = accounts.clone();
+        let path = path.clone();
+        sign_in.connect_clicked(move |_| {
+            sign_in.set_sensitive(false);
+            status.set_text("Requesting Microsoft sign-in code…");
 
-            let open = Button::with_label("Open Microsoft sign-in page");
-            let url_for_button = url.clone();
-            open.connect_clicked(move |_| {
-                let _ = open::that(&url_for_button);
+            let status_for_device = status.clone();
+            let sign_in_for_device = sign_in.clone();
+            let accounts_for_device = accounts.clone();
+            let path_for_device = path.clone();
+            let rt_for_device = rt.clone();
+
+            glib::MainContext::default().spawn_local(async move {
+                let device_result = rt_for_device.spawn(request_device_code()).await;
+                let device = match device_result {
+                    Ok(Ok(device)) => device,
+                    Ok(Err(error)) => {
+                        status_for_device.set_text(&format!("Microsoft login failed: {error}"));
+                        sign_in_for_device.set_sensitive(true);
+                        return;
+                    }
+                    Err(error) => {
+                        status_for_device.set_text(&format!("Microsoft login failed: {error}"));
+                        sign_in_for_device.set_sensitive(true);
+                        return;
+                    }
+                };
+
+                show_device_code(
+                    &status_for_device,
+                    &device,
+                    &sign_in_for_device,
+                    accounts_for_device,
+                    path_for_device,
+                    rt_for_device,
+                );
             });
-            accounts_box_ui.append(&open);
+        });
+    }
 
-            // Again, only Send data is captured by the Tokio task.
-            let rt_auth = rt_for_auth.clone();
-            let auth_handle = rt_auth.spawn(async move { complete_device_login(device).await });
-            let path_save = path_result.clone();
+    let dialog_for_close = dialog.clone();
+    close.connect_clicked(move |_| dialog_for_close.close());
 
-            let result = auth_handle.await;
+    dialog.present();
+}
+
+fn show_device_code(
+    status: &Label,
+    device: &DeviceCode,
+    sign_in: &Button,
+    accounts: Rc<RefCell<Vec<MinecraftAccount>>>,
+    path: PathBuf,
+    rt: Rc<Runtime>,
+) {
+    status.set_text("Enter this code on the Microsoft sign-in page:");
+
+    let parent = status.root().and_downcast::<gtk4::Window>();
+    let dialog = gtk4::Window::builder()
+        .title("Microsoft Sign-in")
+        .default_width(390)
+        .default_height(280)
+        .modal(true)
+        .build();
+    if let Some(parent) = parent {
+        dialog.set_transient_for(Some(&parent));
+    }
+
+    let box_root = GtkBox::new(Orientation::Vertical, 14);
+    box_root.set_margin_top(24);
+    box_root.set_margin_bottom(24);
+    box_root.set_margin_start(24);
+    box_root.set_margin_end(24);
+
+    let code = Entry::new();
+    code.set_text(&device.user_code);
+    code.set_editable(false);
+    code.set_selectable(true);
+    code.set_can_focus(true);
+    code.set_halign(Align::Center);
+    code.add_css_class("title-2");
+    box_root.append(&code);
+
+    let copy = Button::with_label("Copy code");
+    box_root.append(&copy);
+
+    let open = Button::with_label("Open sign-in page");
+    open.add_css_class("suggested-action");
+    box_root.append(&open);
+
+    let info = Label::new(Some(&format!("Code expires in about {} minutes.", (device.expires_in + 59) / 60)));
+    info.add_css_class("dim-label");
+    info.set_wrap(true);
+    box_root.append(&info);
+
+    let done = Button::with_label("Waiting for sign-in…");
+    done.set_sensitive(false);
+    box_root.append(&done);
+
+    dialog.set_child(Some(&box_root));
+
+    {
+        let code = code.clone();
+        copy.connect_clicked(move |_| {
+            if let Some(display) = gtk4::gdk::Display::default() {
+                display.clipboard().set_text(&code.text());
+            }
+        });
+    }
+
+    {
+        let uri = device.verification_uri.clone();
+        open.connect_clicked(move |_| {
+            let _ = gtk4::gio::AppInfo::launch_default_for_uri(&uri, None::<&gtk4::gio::AppLaunchContext>);
+        });
+    }
+
+    {
+        let status = status.clone();
+        let sign_in = sign_in.clone();
+        let accounts = accounts.clone();
+        let path = path.clone();
+        let rt = rt.clone();
+        let dialog = dialog.clone();
+        glib::MainContext::default().spawn_local(async move {
+            let result = rt.spawn(complete_device_login(device.clone())).await;
             match result {
                 Ok(Ok(account)) => {
-                    let mut accounts = load_accounts(&path_save).await.unwrap_or_default();
-                    accounts.retain(|a| a.id != account.id);
-                    accounts.push(account.clone());
-
-                    if let Err(error) = save_accounts(&path_save, &accounts).await {
-                        status_ui.set_label(&format!(
-                            "Login succeeded, but saving failed: {}",
-                            error
-                        ));
-                    } else {
-                        status_ui.set_label(&format!("Signed in as {}.", account.name));
-                        accounts_box_ui.append(
-                            &Label::builder()
-                                .label(&format!("✓  {}", account.name))
-                                .halign(Align::Start)
-                                .build(),
-                        );
+                    let account_for_save = account.clone();
+                    accounts.borrow_mut().retain(|existing| existing.id != account.id);
+                    accounts.borrow_mut().push(account);
+                    let saved = accounts.borrow().clone();
+                    let save_result = rt.spawn(async move { save_accounts(&path, &saved).await }).await;
+                    match save_result {
+                        Ok(Ok(())) => {
+                            status.set_text(&format!("Signed in as {}", account_for_save.name));
+                            sign_in.set_sensitive(true);
+                            dialog.close();
+                        }
+                        Ok(Err(error)) => status.set_text(&format!("Signed in, but could not save account: {error}")),
+                        Err(error) => status.set_text(&format!("Signed in, but could not save account: {error}")),
                     }
                 }
                 Ok(Err(error)) => {
-                    status_ui.set_label(&format!("Microsoft login failed: {}", error));
+                    status.set_text(&format!("Microsoft login failed: {error}"));
+                    sign_in.set_sensitive(true);
+                    dialog.close();
                 }
                 Err(error) => {
-                    status_ui.set_label(&format!("Microsoft login task failed: {}", error));
+                    status.set_text(&format!("Microsoft login failed: {error}"));
+                    sign_in.set_sensitive(true);
+                    dialog.close();
                 }
             }
-
-            button_ui.set_sensitive(true);
         });
-    });
+    }
 
-    let dialog_clone = dialog.clone();
-    close_button.connect_clicked(move |_| dialog_clone.close());
     dialog.present();
 }
