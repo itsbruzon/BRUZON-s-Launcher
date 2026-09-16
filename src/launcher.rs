@@ -566,3 +566,57 @@ impl MinecraftLauncher {
             let mut out = tokio::fs::File::create(&installer_path).await?;
             out.write_all(&bytes).await?;
         }
+
+        let java_path = if let Some(p) = java_path_buf {
+            p
+        } else {
+            self.java_manager.find_java()?
+        };
+
+        let mut command = TokioCommand::new(java_path);
+        command
+            .arg("-jar")
+            .arg(&installer_path)
+            .arg("client")
+            .arg("-dir")
+            .arg(&self.config.minecraft_dir)
+            .arg("-mcversion")
+            .arg(mc_version)
+            .arg("-noprofile")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let output = command.output().await?;
+
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow!("Fabric installation failed: {}", err));
+        }
+
+        let versions_dir = self.config.versions_dir.clone();
+        let mut best_match: Option<String> = None;
+        let mut latest_time = std::time::SystemTime::UNIX_EPOCH;
+
+        let mut read_dir = tokio::fs::read_dir(&versions_dir).await?;
+        while let Some(entry) = read_dir.next_entry().await? {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name.contains("fabric-loader") && name.ends_with(&format!("-{}", mc_version))
+                    {
+                        if let Ok(metadata) = entry.metadata().await {
+                            if let Ok(modified) = metadata.modified() {
+                                if modified > latest_time {
+                                    latest_time = modified;
+                                    best_match = Some(name.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        best_match.ok_or_else(|| anyhow!("Could not find installed Fabric version directory"))
+    }
+}
