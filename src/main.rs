@@ -1,6 +1,5 @@
 mod auth;
 mod config;
-mod instances;
 mod java_manager;
 mod launcher;
 mod library_manager;
