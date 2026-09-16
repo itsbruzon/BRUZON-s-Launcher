@@ -141,7 +141,8 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                     glib::MainContext::default().spawn_local(async move {
                         match rt.spawn(async move { save_selected_account(&selected_account_path(), Some(&selected_id)).await }).await {
                             Ok(Ok(())) => status.set_text("Account selected. Instances will use it on launch."),
-                            Ok(Err(error)) | Err(error) => status.set_text(&format!("Could not save selected account: {error}")),
+                            Ok(Err(error)) => status.set_text(&format!("Could not save selected account: {error}")),
+                            Err(error) => status.set_text(&format!("Could not save selected account: {error}")),
                         }
                     });
                 });
@@ -171,7 +172,8 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
                         let save_result = rt.spawn(async move { save_selected_account(&selected_account_path(), selected_id.as_deref()).await }).await;
                         match save_result {
                             Ok(Ok(())) => status.set_text("Account removed."),
-                            Ok(Err(error)) | Err(error) => status.set_text(&format!("Could not save selection: {error}")),
+                            Ok(Err(error)) => status.set_text(&format!("Could not save selection: {error}")),
+                            Err(error) => status.set_text(&format!("Could not save selection: {error}")),
                         }
                     });
                 });
@@ -195,7 +197,8 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
             let loaded = rt.spawn(async move { load_accounts(&accounts_path()).await }).await;
             match loaded {
                 Ok(Ok(saved)) => *accounts.borrow_mut() = saved,
-                Ok(Err(error)) | Err(error) => status.set_text(&format!("Could not load accounts: {error}")),
+                Ok(Err(error)) => status.set_text(&format!("Could not load accounts: {error}")),
+                Err(error) => status.set_text(&format!("Could not load accounts: {error}")),
             }
             let loaded_selected = rt.spawn(async move { crate::auth::load_selected_account(&selected_account_path()).await }).await;
             if let Ok(Ok(id)) = loaded_selected {
