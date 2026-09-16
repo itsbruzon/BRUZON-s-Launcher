@@ -1,7 +1,6 @@
 use adw::{self, NavigationPage, NavigationSplitView};
 use relm4::gtk;
 
-#[allow(dead_code)]
 pub struct AppWidgets {
     pub window: adw::ApplicationWindow,
     pub header_bar: adw::HeaderBar,
@@ -16,7 +15,7 @@ pub struct AppWidgets {
     pub logs_page: gtk::Box,
     pub loading_page: adw::StatusPage,
 
-    // Home page widgets
+    // Home / create page widgets
     pub profile_list: gtk::ListBox,
     pub username_entry: adw::EntryRow,
     pub version_combo: adw::ComboRow,
@@ -24,49 +23,37 @@ pub struct AppWidgets {
     pub fabric_switch: adw::SwitchRow,
     pub hide_logs_switch: adw::SwitchRow,
 
-    // Buttons
-    pub launch_button: gtk::Button,
-    pub create_button: gtk::Button,
-    pub delete_button: gtk::Button,
-    pub save_button: gtk::Button,
-    pub cancel_button: gtk::Button,
-
     // Sidebar buttons
     pub home_button: gtk::Button,
     pub create_sidebar_button: gtk::Button,
     pub settings_button: gtk::Button,
     pub logs_button: gtk::Button,
 
-    // Sidebar button labels (for visibility)
+    // Sidebar button labels
     pub home_label: gtk::Label,
     pub create_label: gtk::Label,
     pub settings_label: gtk::Label,
     pub logs_label: gtk::Label,
 
-    // Sidebar button boxes (for alignment)
+    // Sidebar button boxes
     pub home_box: gtk::Box,
     pub create_box: gtk::Box,
     pub settings_box: gtk::Box,
     pub logs_box: gtk::Box,
 
-    // Sidebar Toggle
+    // Sidebar toggle
     pub sidebar_toggle_button: gtk::Button,
 
-    // Settings widgets
+    // Settings
     pub theme_combo: adw::ComboRow,
 
-    // Status/error labels
-    pub status_label: gtk::Label,
+    // Error / loading state
     pub error_label: gtk::Label,
-
-    // Loading widgets
     pub loading_spinner: gtk::Spinner,
     pub loading_progress: gtk::ProgressBar,
     pub loading_label: gtk::Label,
 
-    // Toast Overlay
+    // Toasts / logs
     pub toast_overlay: adw::ToastOverlay,
-
-    // Logs view
     pub logs_view: gtk::TextView,
 }
