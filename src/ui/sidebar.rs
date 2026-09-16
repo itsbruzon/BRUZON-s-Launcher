@@ -73,8 +73,9 @@ pub fn create_sidebar(
         profiles_sender.input(AppMsg::NavigateToSection(Section::Profiles));
     });
 
-    // Keep every sidebar label in sync with the actual sidebar width. This also
-    // covers Profiles, which is positioned separately at the bottom of the sidebar.
+    // Keep every sidebar label in sync with the actual sidebar width, including
+    // the Profiles button at the bottom. The idle pass handles the initial
+    // allocation because width_notify is not guaranteed to fire on startup.
     let labels = [
         home_label.clone(),
         create_label.clone(),
@@ -89,8 +90,8 @@ pub fn create_sidebar(
         logs_box.clone(),
         profiles_box.clone(),
     ];
-    sidebar_content.connect_width_notify(move |sidebar| {
-        let collapsed = sidebar.width() <= 100;
+    let sync_sidebar = move |width: i32| {
+        let collapsed = width <= 100;
         for label in &labels {
             label.set_visible(!collapsed);
         }
@@ -101,6 +102,16 @@ pub fn create_sidebar(
                 gtk::Align::Start
             });
         }
+    };
+
+    let sync_on_resize = sync_sidebar.clone();
+    sidebar_content.connect_width_notify(move |sidebar| {
+        sync_on_resize(sidebar.width());
+    });
+
+    let sync_initial = sync_sidebar.clone();
+    glib::idle_add_local_once(move || {
+        sync_initial(sidebar_content.width());
     });
 
     let sender_clone = sender.clone();
