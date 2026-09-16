@@ -367,6 +367,13 @@ pub async fn save_selected_account(path: &Path, account_id: Option<&str>) -> Res
             }
         }
     }
+
+    #[cfg(unix)]
+    if path.exists() {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
+    }
+
     Ok(())
 }
 
