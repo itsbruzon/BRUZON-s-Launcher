@@ -74,6 +74,7 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
 
     let accounts: Rc<RefCell<Vec<MinecraftAccount>>> = Rc::new(RefCell::new(Vec::new()));
     let selected: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let rebuild_slot: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
 
     let rebuild: Rc<dyn Fn()> = Rc::new({
         let account_area = account_area.clone();
@@ -81,6 +82,7 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
         let selected = selected.clone();
         let status = status.clone();
         let rt = rt.clone();
+        let rebuild_slot = rebuild_slot.clone();
         move || {
             while let Some(child) = account_area.first_child() {
                 account_area.remove(&child);
@@ -156,7 +158,7 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
                 let selected_for_remove = selected.clone();
                 let status_for_remove = status.clone();
                 let rt_for_remove = rt.clone();
-                let rebuild_for_remove = rebuild.clone();
+                let rebuild_for_remove = rebuild_slot.borrow().clone();
                 remove.connect_clicked(move |_| {
                     accounts_for_remove.borrow_mut().retain(|item| item.id != remove_id);
                     if selected_for_remove.borrow().as_deref() == Some(remove_id.as_str()) {
@@ -180,7 +182,9 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
                         match result {
                             Ok(Ok(())) => {
                                 status.set_text("Account removed.");
-                                rebuild();
+                                if let Some(rebuild) = rebuild {
+                                    rebuild();
+                                }
                             }
                             Ok(Err(error)) => status.set_text(&format!("Could not remove account: {error}")),
                             Err(error) => status.set_text(&format!("Could not remove account: {error}")),
@@ -196,6 +200,8 @@ pub fn create_profiles_page(rt: Arc<Runtime>) -> gtk::ScrolledWindow {
             }
         }
     });
+
+    *rebuild_slot.borrow_mut() = Some(rebuild.clone());
 
     {
         let accounts = accounts.clone();
