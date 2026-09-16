@@ -9,12 +9,6 @@ pub struct Settings {
     pub theme: Theme,
     pub hide_logs: bool,
     pub sidebar_collapsed: bool,
-    #[serde(default = "default_discord_presence")]
-    pub discord_presence: bool,
-}
-
-fn default_discord_presence() -> bool {
-    true
 }
 
 impl Default for Settings {
@@ -23,7 +17,6 @@ impl Default for Settings {
             theme: Theme::System,
             hide_logs: false,
             sidebar_collapsed: false,
-            discord_presence: true,
         }
     }
 }
