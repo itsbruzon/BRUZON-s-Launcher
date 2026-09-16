@@ -74,7 +74,7 @@ fn sanitize_component(value: &str) -> String {
 
 /// Ensure an instance directory exists before Minecraft is started.
 pub async fn ensure_instance_dir(instance: &Instance, instances_root: &Path) -> Result<PathBuf> {
-    let dir = instance.game_dir(instances_root);
+    let dir = validate_instance_dir(instance, instances_root)?;
     tokio::fs::create_dir_all(&dir).await?;
     Ok(dir)
 }
@@ -82,9 +82,35 @@ pub async fn ensure_instance_dir(instance: &Instance, instances_root: &Path) -> 
 /// Resolve an instance directory while rejecting paths that escape the
 /// launcher-managed instances directory.
 pub fn validate_instance_dir(instance: &Instance, instances_root: &Path) -> Result<PathBuf> {
+    if instances_root.as_os_str().is_empty() {
+        return Err(anyhow!("Invalid instances root directory"));
+    }
+
     let dir = instance.game_dir(instances_root);
     if dir.parent() != Some(instances_root) {
         return Err(anyhow!("Invalid instance directory"));
     }
     Ok(dir)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn instance_id_is_stable_and_filesystem_safe() {
+        assert_eq!(
+            make_instance_id("My Survival World", "1.21.8", true),
+            "My-Survival-World-1.21.8-fabric"
+        );
+    }
+
+    #[test]
+    fn instance_does_not_contain_account_identity() {
+        let instance = Instance::new("Survival".into(), "1.21.8".into(), 4096, false);
+        let json = serde_json::to_string(&instance).unwrap();
+        assert!(!json.contains("username"));
+        assert!(!json.contains("access_token"));
+        assert!(!json.contains("account"));
+    }
 }
