@@ -41,7 +41,7 @@ impl SimpleComponent for AppModel {
 
     fn init_root() -> Self::Root {
         let window = adw::ApplicationWindow::builder()
-            .title("RCraft")
+            .title("BRUZON's Launcher")
             .default_width(900)
             .default_height(540)
             .build();
@@ -136,7 +136,7 @@ impl SimpleComponent for AppModel {
         };
 
         // Set window title
-        root.set_title(Some("RCraft"));
+        root.set_title(Some("BRUZON's Launcher"));
 
         // Create navigation split view for sidebar navigation
         let navigation_split_view = adw::NavigationSplitView::new();
@@ -268,7 +268,7 @@ impl SimpleComponent for AppModel {
 
         // Wrap content_stack in a NavigationPage for NavigationSplitView
         let navigation_page = adw::NavigationPage::builder()
-            .title("RCraft")
+            .title("BRUZON's Launcher")
             .child(&content_stack)
             .build();
 
@@ -282,7 +282,7 @@ impl SimpleComponent for AppModel {
         // Create header bar
         let header_bar = adw::HeaderBar::new();
         header_bar.set_show_end_title_buttons(true);
-        header_bar.set_title_widget(Some(&adw::WindowTitle::new("RCraft", "")));
+        header_bar.set_title_widget(Some(&adw::WindowTitle::new("BRUZON's Launcher", "")));
 
         // Sidebar toggle button
         let sidebar_toggle_button = gtk::Button::builder()
@@ -453,7 +453,6 @@ impl SimpleComponent for AppModel {
             AppMsg::VersionsLoaded(result) => {
                 match result {
                     Ok(versions) => {
-                        // use crate::utils::{is_at_least_1_8, compare_versions};
                         use crate::utils::compare_versions;
                         let mut filtered: Vec<_> = versions.into_iter().collect();
                         filtered.sort_by(|a, b| compare_versions(&b.id, &a.id));
@@ -506,7 +505,6 @@ impl SimpleComponent for AppModel {
                                 sender_progress.input(AppMsg::DownloadProgress(pct, msg));
                             };
 
-                            // 1. Prepare and Launch
                             match launcher_clone
                                 .prepare_and_launch(
                                     profile_clone.version.clone(),
@@ -532,8 +530,7 @@ impl SimpleComponent for AppModel {
                                             let sender_log = sender_clone.clone();
                                             let mut reader = BufReader::new(stdout).lines();
                                             tokio::spawn(async move {
-                                                while let Ok(Some(line)) = reader.next_line().await
-                                                {
+                                                while let Ok(Some(line)) = reader.next_line().await {
                                                     sender_log.input(AppMsg::Log(line));
                                                 }
                                             });
@@ -542,12 +539,8 @@ impl SimpleComponent for AppModel {
                                             let sender_log = sender_clone.clone();
                                             let mut reader = BufReader::new(stderr).lines();
                                             tokio::spawn(async move {
-                                                while let Ok(Some(line)) = reader.next_line().await
-                                                {
-                                                    sender_log.input(AppMsg::Log(format!(
-                                                        "[ERR] {}",
-                                                        line
-                                                    )));
+                                                while let Ok(Some(line)) = reader.next_line().await {
+                                                    sender_log.input(AppMsg::Log(format!("[ERR] {}", line)));
                                                 }
                                             });
                                         }
@@ -669,12 +662,6 @@ impl SimpleComponent for AppModel {
                 self.settings.theme = theme.clone();
                 if let Some(window) = &self.window {
                     let style_manager = adw::StyleManager::default();
-
-                    // Reset CSS provider if stored? Since we don't store it, we just add.
-                    // A better approach for "Total Black" is just forcing dark and adding a provider.
-                    // For now, let's just try setting the scheme.
-
-                    // Reset classes
                     window.remove_css_class("transparent-window");
 
                     match theme {
@@ -700,12 +687,11 @@ impl SimpleComponent for AppModel {
                 }
             }
             AppMsg::RequestDeleteProfile(profile_name) => {
-                // Show dialog
                 if let Some(window) = &self.window {
                     let dialog = adw::MessageDialog::builder()
                         .heading("Delete Profile?")
                         .body(format!(
-                            "Are you sure you want to delete profile '{}'?",
+                            "Are you sure you want to delete profile '{}' ?",
                             profile_name
                         ))
                         .transient_for(window)
@@ -818,7 +804,6 @@ impl SimpleComponent for AppModel {
             }
         }
 
-        // Common updates
         widgets.logs_button.set_visible(!self.settings.hide_logs);
         widgets.hide_logs_switch.set_active(self.settings.hide_logs);
         widgets
@@ -858,7 +843,6 @@ impl SimpleComponent for AppModel {
     }
 }
 
-// Helpers for model to keep update() cleaner
 impl AppModel {
     fn apply_discord_presence(&self, presence: RpcPresence) {
         if self.settings.discord_presence {
@@ -899,7 +883,6 @@ impl AppModel {
     }
 }
 
-// Extension to AppWidgets to help with view updates
 impl AppWidgets {
     fn set_sidebar_buttons_sensitive(&self, sensitive: bool) {
         self.home_button.set_sensitive(sensitive);
