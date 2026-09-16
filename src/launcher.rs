@@ -51,7 +51,7 @@ impl MinecraftLauncher {
     pub async fn build_classpath(&self, start_version: &str) -> Result<String> {
         let mut classpath_paths: Vec<PathBuf> = Vec::new();
         let mut seen_artifacts: std::collections::HashSet<String> =
-            std::collections::HashSet::new(); // group:artifact
+            std::collections::HashSet::new();
         let os_name = crate::utils::get_os_name();
 
         let mut current_version_id = Some(start_version.to_string());
@@ -122,7 +122,6 @@ impl MinecraftLauncher {
             if let Some(parent) = version_json.inherits_from {
                 current_version_id = Some(parent);
             } else {
-                // Base version (Vanilla) -> jar path
                 let jar_path = version_dir.join(format!("{}.jar", version));
                 vanilla_jar_path = Some(jar_path);
                 current_version_id = None;
@@ -159,7 +158,6 @@ impl MinecraftLauncher {
         }
         let bytes = response.bytes().await?;
 
-        // Ensure parent dir exists again just in case (race condition in parallel)
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await?;
         }
@@ -193,10 +191,8 @@ impl MinecraftLauncher {
                 fs::create_dir_all(&legacy_virtual_dir).await?;
             }
 
-            // Collect all objects that need processing
             let mut pending_objects = Vec::new();
             for (name, object) in index.objects {
-                // Check if we need to download or copy virtual
                 let hash_head = &object.hash[0..2];
                 let object_path = objects_dir.join(hash_head).join(&object.hash);
 
@@ -222,7 +218,6 @@ impl MinecraftLauncher {
                     cb(0.0, format!("Downloading {} assets...", total_items));
                 }
 
-                // Concurrent download using buffered stream
                 let bodies = stream::iter(pending_objects)
                     .map(
                         |(name, object, object_path, needs_download, needs_virtual)| {
@@ -239,7 +234,6 @@ impl MinecraftLauncher {
                                     );
                                     if let Err(e) = Self::download_file(&url, &object_path).await {
                                         eprintln!("Failed to download asset {}: {}", name, e);
-                                        // Continue anyway, don't fail everything for one asset
                                     }
                                 }
 
@@ -268,7 +262,7 @@ impl MinecraftLauncher {
                             }
                         },
                     )
-                    .buffer_unordered(20); // Parallel downloads
+                    .buffer_unordered(20);
 
                 bodies.collect::<Vec<()>>().await;
             }
@@ -284,7 +278,6 @@ impl MinecraftLauncher {
             return Ok(());
         }
 
-        // Need to find URL from manifest
         let manifest = self.get_available_versions().await?;
         let version_info = manifest.iter().find(|v| v.id == version);
 
@@ -317,19 +310,15 @@ impl MinecraftLauncher {
         let jar_dir = self.config.versions_dir.join(jar_version);
         let jar_path = jar_dir.join(format!("{}.jar", jar_version));
 
-        // Create jar directory if it doesn't exist (e.g for new versions)
         if !jar_dir.exists() {
             fs::create_dir_all(&jar_dir).await?;
         }
 
-        // If inheriting, ensure parent JSON is ready (so we can get download URL if needed)
         if jar_version != version {
             self.ensure_version_ready(jar_version).await?;
         }
 
-        // Check/Download JAR
         if !jar_path.exists() {
-            // Determine which JSON has the download URL
             let source_json = if jar_version == version {
                 version_json.clone()
             } else {
@@ -347,7 +336,6 @@ impl MinecraftLauncher {
         }
 
         if !jar_path.exists() {
-            // If still not exists, try to fallback to main version jar if inherits is present but we are launching child
             return Err(anyhow!(
                 "Version JAR not found at: {:?} and no download URL available",
                 jar_path
@@ -361,18 +349,14 @@ impl MinecraftLauncher {
             .join(natives_version)
             .join("natives");
 
-        // Check/Repair Natives
         self.library_manager
             .check_and_extract_natives(natives_version)
             .await?;
 
-        // Check/Download Libraries
         self.library_manager
             .check_and_download_libraries(natives_version)
             .await?;
 
-        // Prepare Assets (Download & Virtualize if needed)
-        // For launch_minecraft direct call we don't report progress, maybe todo later
         self.prepare_assets(&version_json, None::<fn(f64, String)>)
             .await?;
 
@@ -402,7 +386,7 @@ impl MinecraftLauncher {
         command
             .arg("-Xmx".to_string() + &ram_mb.to_string() + "M")
             .arg("-Xms".to_string() + &(ram_mb / 2).to_string() + "M")
-            .arg("-Dminecraft.launcher.brand=RCraft")
+            .arg("-Dminecraft.launcher.brand=BLauncher")
             .arg(format!(
                 "-Dminecraft.launcher.version={}",
                 env!("CARGO_PKG_VERSION")
@@ -436,7 +420,6 @@ impl MinecraftLauncher {
         Ok(command)
     }
 
-    // High Level Launch Orchestration
     pub async fn prepare_and_launch<F>(
         &self,
         base_version: String,
@@ -454,10 +437,8 @@ impl MinecraftLauncher {
         on_progress(0.1, "Finding Java...".into());
         let java_p = self.java_manager.find_java()?;
 
-        // Handle Fabric
         if is_fabric {
             on_progress(0.2, "Checking Fabric...".into());
-            // Check if fabric version already exists for this base version
             let fabric_installed = self.find_installed_fabric_version(&base_version).await;
 
             if let Some(fabric_id) = fabric_installed {
@@ -474,14 +455,9 @@ impl MinecraftLauncher {
             }
         }
 
-        // 3. Prepare Game Dir
         let game_dir = if let Some(dir) = game_dir_override {
             dir
         } else {
-            // Default instance dir based on profile/version (logic was in UI, but cleaner here if we pass profile name?)
-            // If simple launch, maybe just use .minecraft? No, better use isolated instances if possible.
-            // But preserving old logic: in UI code it was `instances/profile_name` or `game_dir` from profile.
-            // We'll trust the caller passed the right dir.
             self.config.minecraft_dir.clone()
         };
 
@@ -490,9 +466,7 @@ impl MinecraftLauncher {
         }
 
         on_progress(0.4, "Launching Game...".into());
-        // 4. Launch
 
-        // We reuse the lower level launch_minecraft but passing our resolved version
         let cmd = self
             .launch_minecraft(&version_to_launch, &username, ram_mb, &game_dir)
             .await;
@@ -520,7 +494,6 @@ impl MinecraftLauncher {
         mc_version: &str,
         java_path_buf: Option<PathBuf>,
     ) -> Result<String> {
-        // 1. Download Fabric Installer
         let installer_url = "https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.1.0/fabric-installer-1.1.0.jar";
         let cache_dir = self.config.minecraft_dir.join("cache");
         fs::create_dir_all(&cache_dir).await?;
