@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::Path;
 use tokio::fs;
 
 use crate::models::Theme;
@@ -22,21 +22,21 @@ impl Default for Settings {
 }
 
 impl Settings {
-    pub async fn load(config_dir: &PathBuf) -> Self {
+    pub async fn load(config_dir: &Path) -> Self {
         let path = config_dir.join("settings.json");
-        if let Ok(content) = fs::read_to_string(&path).await {
-            serde_json::from_str(&content).unwrap_or_default()
-        } else {
-            Self::default()
+        match fs::read_to_string(&path).await {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Err(_) => Self::default(),
         }
     }
 
-    pub async fn save(&self, config_dir: &PathBuf) -> Result<(), std::io::Error> {
+    pub async fn save(&self, config_dir: &Path) -> Result<(), std::io::Error> {
         let path = config_dir.join("settings.json");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await?;
         }
-        let json = serde_json::to_string_pretty(self).unwrap_or_default();
+        let json = serde_json::to_string_pretty(self)
+            .map_err(std::io::Error::other)?;
         fs::write(path, json).await
     }
 }
