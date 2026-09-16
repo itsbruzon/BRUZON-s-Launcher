@@ -1,4 +1,5 @@
 use crate::auth::{complete_device_login, load_accounts, request_device_code, save_accounts};
+use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{Align, Box as GtkBox, Button, Dialog, Label, Orientation};
 use std::path::PathBuf;
@@ -47,7 +48,6 @@ pub fn open_profiles_dialog(parent: Option<&gtk4::Window>) {
         status_click.set_label("Requesting a Microsoft sign-in code…");
         let status_device = status_click.clone();
         let status_result = status_click.clone();
-        let button_device = login_click.clone();
         let button_result = login_click.clone();
         let accounts_box_device = accounts_box_click.clone();
         let accounts_box_result = accounts_box_click.clone();
