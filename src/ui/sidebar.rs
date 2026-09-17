@@ -63,45 +63,14 @@ pub fn create_sidebar(
     let (logs_button, logs_label, logs_box) = create_nav_button("Logs", "utilities-terminal-symbolic");
     logs_button.set_visible(false);
 
-    // Profiles is the account manager. Keep it visually consistent with the
-    // other sidebar entries when the sidebar switches between expanded and
-    // compact widths.
+    // Profiles is the account manager. It is controlled by the same sidebar
+    // collapse state as the other navigation entries.
     let (profiles_button, profiles_label, profiles_box) =
         create_nav_button("Profiles", "avatar-default-symbolic");
     profiles_button.set_tooltip_text(Some("Manage Microsoft and offline accounts"));
     let profiles_sender = sender.clone();
     profiles_button.connect_clicked(move |_| {
         profiles_sender.input(AppMsg::NavigateToSection(Section::Profiles));
-    });
-
-    // Do not poll the sidebar width. A 100 ms timer was fighting the main
-    // component's collapsed state while NavigationSplitView was resizing,
-    // which caused the labels to flicker/jump during every toggle.
-    // Instead, react to GTK's width notifications so Profiles follows the
-    // same actual allocation without introducing a second resize loop.
-    let profiles_label_for_resize = profiles_label.clone();
-    let profiles_box_for_resize = profiles_box.clone();
-    sidebar_content.connect_notify_local(Some("width"), move |sidebar, _| {
-        let collapsed = sidebar.width() <= 100;
-        profiles_label_for_resize.set_visible(!collapsed);
-        profiles_box_for_resize.set_halign(if collapsed {
-            gtk::Align::Center
-        } else {
-            gtk::Align::Start
-        });
-    });
-
-    let profiles_label_for_idle = profiles_label.clone();
-    let profiles_box_for_idle = profiles_box.clone();
-    let sidebar_for_idle = sidebar_content.clone();
-    gtk::glib::idle_add_local_once(move || {
-        let collapsed = sidebar_for_idle.width() <= 100;
-        profiles_label_for_idle.set_visible(!collapsed);
-        profiles_box_for_idle.set_halign(if collapsed {
-            gtk::Align::Center
-        } else {
-            gtk::Align::Start
-        });
     });
 
     let sender_clone = sender.clone();
@@ -137,6 +106,22 @@ pub fn create_sidebar(
         .hexpand(true)
         .build();
     sidebar_page.set_css_classes(&["flat"]);
+
+    // Do not watch the inner Box's width. Its allocation happens after the
+    // NavigationSplitView changes size, which leaves Profiles one frame behind
+    // the other entries. Watching the NavigationPage keeps Profiles synchronized
+    // with the sidebar allocation itself.
+    let profiles_label_for_resize = profiles_label.clone();
+    let profiles_box_for_resize = profiles_box.clone();
+    sidebar_page.connect_notify_local(Some("width"), move |sidebar, _| {
+        let collapsed = sidebar.width() <= 100;
+        profiles_label_for_resize.set_visible(!collapsed);
+        profiles_box_for_resize.set_halign(if collapsed {
+            gtk::Align::Center
+        } else {
+            gtk::Align::Start
+        });
+    });
 
     (
         sidebar_page,
