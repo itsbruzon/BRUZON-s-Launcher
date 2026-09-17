@@ -5,7 +5,6 @@ use adw::NavigationPage;
 use adw::prelude::*;
 use relm4::ComponentSender;
 use relm4::gtk;
-use gtk4::glib;
 
 pub fn create_sidebar(
     sender: &ComponentSender<AppModel>,
@@ -64,8 +63,9 @@ pub fn create_sidebar(
     let (logs_button, logs_label, logs_box) = create_nav_button("Logs", "utilities-terminal-symbolic");
     logs_button.set_visible(false);
 
-    // Profiles is the account manager. Accounts are deliberately kept separate
-    // from instances: an instance never stores which account launched it.
+    // Profiles is the account manager. Keep it visually consistent with the
+    // other sidebar entries when the sidebar switches between expanded and
+    // compact widths.
     let (profiles_button, profiles_label, profiles_box) =
         create_nav_button("Profiles", "avatar-default-symbolic");
     profiles_button.set_tooltip_text(Some("Manage Microsoft and offline accounts"));
@@ -74,52 +74,34 @@ pub fn create_sidebar(
         profiles_sender.input(AppMsg::NavigateToSection(Section::Profiles));
     });
 
-    // Keep every sidebar label in sync with the actual sidebar width, including
-    // the Profiles button at the bottom. GTK's Box does not expose a width-notify
-    // signal, so observe the allocation instead through a size-allocate callback.
-    let labels = [
-        home_label.clone(),
-        create_label.clone(),
-        settings_label.clone(),
-        logs_label.clone(),
-        profiles_label.clone(),
-    ];
-    let boxes = [
-        home_box.clone(),
-        create_box.clone(),
-        settings_box.clone(),
-        logs_box.clone(),
-        profiles_box.clone(),
-    ];
-
-    let update_sidebar_layout = move |width: i32| {
-        let collapsed = width <= 100;
-        for label in &labels {
-            label.set_visible(!collapsed);
-        }
-        for box_container in &boxes {
-            box_container.set_halign(if collapsed {
-                gtk::Align::Center
-            } else {
-                gtk::Align::Start
-            });
-        }
-    };
-
-    // GTK4 does not provide connect_width_notify on GtkBox. The sidebar is
-    // allocated by the NavigationSplitView, so update after allocation and
-    // whenever GTK processes a new frame.
-    let update_for_idle = update_sidebar_layout.clone();
-    let sidebar_for_idle = sidebar_content.clone();
-    glib::idle_add_local_once(move || {
-        update_for_idle(sidebar_for_idle.width());
+    // Do not poll the sidebar width. A 100 ms timer was fighting the main
+    // component's collapsed state while NavigationSplitView was resizing,
+    // which caused the labels to flicker/jump during every toggle.
+    // Instead, react to GTK's width notifications so Profiles follows the
+    // same actual allocation without introducing a second resize loop.
+    let profiles_label_for_resize = profiles_label.clone();
+    let profiles_box_for_resize = profiles_box.clone();
+    sidebar_content.connect_notify_local(Some("width"), move |sidebar, _| {
+        let collapsed = sidebar.width() <= 100;
+        profiles_label_for_resize.set_visible(!collapsed);
+        profiles_box_for_resize.set_halign(if collapsed {
+            gtk::Align::Center
+        } else {
+            gtk::Align::Start
+        });
     });
 
-    let update_for_resize = update_sidebar_layout.clone();
-    let sidebar_for_resize = sidebar_content.clone();
-    glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
-        update_for_resize(sidebar_for_resize.width());
-        glib::ControlFlow::Continue
+    let profiles_label_for_idle = profiles_label.clone();
+    let profiles_box_for_idle = profiles_box.clone();
+    let sidebar_for_idle = sidebar_content.clone();
+    gtk::glib::idle_add_local_once(move || {
+        let collapsed = sidebar_for_idle.width() <= 100;
+        profiles_label_for_idle.set_visible(!collapsed);
+        profiles_box_for_idle.set_halign(if collapsed {
+            gtk::Align::Center
+        } else {
+            gtk::Align::Start
+        });
     });
 
     let sender_clone = sender.clone();
